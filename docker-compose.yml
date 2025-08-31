@@ -1,0 +1,274 @@
+name: ${COMPOSE_PROJECT_NAME:-workshop-eda}
+
+networks:
+  eda-net:
+    name: ${NETWORK_NAME:-eda-net}
+    driver: bridge
+
+
+volumes:
+  kafka-data: {}
+  order-db-data: {}
+  inventory-db-data: {}
+  fulfillment-db-data: {}
+
+services:
+  # -----------------------------------------------------------
+  # Messaging: Apache Kafka (KRaft, 단일 노드)
+  # -----------------------------------------------------------
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: kafka
+    environment:
+      - KAFKA_ENABLE_KRAFT=yes
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      # 🔽 리스너 3개(내부/컨트롤러/외부)
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      # 🔽 컨테이너 내부용은 kafka:9092, 호스트용은 localhost:29092 로 광고
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_NUM_PARTITIONS=3
+      - KAFKA_CFG_DEFAULT_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=false
+    ports:
+      - "9092:9092"    # 내부용(컨테이너들이 접속) - 필요시만 외부 노출
+      - "29092:29092"  # 외부용(호스트에서 접속)
+    volumes:
+      - kafka-data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - eda-net
+
+
+  # 토픽 초기화(1회성, kafka healthy 이후 실행)
+  topic-init:
+    image: bitnami/kafka:3.7
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash","-c"]
+    command: >
+      "
+      set -e;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.created --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.inventory_reserved --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.inventory_rejected --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.payment_authorized --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.payment_failed --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.fulfillment_scheduled --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.completed --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.canceled --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.orders --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.inventory --partitions 3 --replication-factor 1;
+      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.fulfillment --partitions 3 --replication-factor 1;
+      echo 'topics ready';
+      "
+    networks:
+      - eda-net
+
+  # -----------------------------------------------------------
+  # Databases (각 서비스 독립 DB)
+  # -----------------------------------------------------------
+  order-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${ORDER_DB_NAME:-orders}
+      POSTGRES_USER: ${ORDER_DB_USER:-orders}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASS:-orderspw}
+    ports:
+      - "5433:5432"
+    volumes:
+      - order-db-data:/var/lib/postgresql/data   # ← 영속 볼륨
+      - ./infra/sql/order-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U ${ORDER_DB_USER:-orders} -d ${ORDER_DB_NAME:-orders}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - eda-net
+
+  inventory-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${INV_DB_NAME:-inventory}
+      POSTGRES_USER: ${INV_DB_USER:-inventory}
+      POSTGRES_PASSWORD: ${INV_DB_PASS:-invpw}
+    ports:
+      - "5434:5432"
+    volumes:
+      - inventory-db-data:/var/lib/postgresql/data
+      - ./infra/sql/inventory-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U ${INV_DB_USER:-inventory} -d ${INV_DB_NAME:-inventory}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - eda-net
+
+  fulfillment-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${FUL_DB_NAME:-fulfillment}
+      POSTGRES_USER: ${FUL_DB_USER:-fulfillment}
+      POSTGRES_PASSWORD: ${FUL_DB_PASS:-fulpw}
+    ports:
+      - "5435:5432"
+    volumes:
+      - fulfillment-db-data:/var/lib/postgresql/data
+      - ./infra/sql/fulfillment-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U ${FUL_DB_USER:-fulfillment} -d ${FUL_DB_NAME:-fulfillment}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - eda-net
+
+  # -----------------------------------------------------------
+  # Applications
+  # -----------------------------------------------------------
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    image: ${CI_REGISTRY_IMAGE:-workshop}/api-gateway:local
+    depends_on:
+      order-service:
+        condition: service_started
+    environment:
+      ORDER_SERVICE_URL: http://order-service:8080
+      SERVER_PORT: 8080
+      OTEL_SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_RESOURCE_ATTRIBUTES: env=${OTEL_RESOURCE_ENV:-workshop}
+    ports:
+      - "${API_GATEWAY_PORT:-8080}:8080"
+    networks:
+      - eda-net
+
+  order-service:
+    build:
+      context: ./order-service
+    image: ${CI_REGISTRY_IMAGE:-workshop}/order-service:local
+    depends_on:
+      order-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+      payment-adapter-ext:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8080
+      # DB
+      DB_HOST: ${ORDER_DB_HOST:-order-db}
+      DB_PORT: ${ORDER_DB_PORT:-5432}
+      DB_NAME: ${ORDER_DB_NAME:-orders}
+      DB_USER: ${ORDER_DB_USER:-orders}
+      DB_PASS: ${ORDER_DB_PASS:-orderspw}
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BROKER:-kafka:9092}
+      EVENT_NS: ${EVENT_NS:-orders.v1}
+      # 외부 결제 어댑터
+      PAYMENT_BASE_URL: http://payment-adapter-ext:9090
+      # Observability
+      OTEL_SERVICE_NAME: order-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_RESOURCE_ATTRIBUTES: env=${OTEL_RESOURCE_ENV:-workshop}
+      OTEL_INSTRUMENTATION_MESSAGING_PROPAGATORS: tracecontext,b3
+    ports:
+      - "${ORDER_SVC_PORT:-8081}:8080"
+    networks:
+      - eda-net
+
+  inventory-service:
+    build:
+      context: ./inventory-service
+    image: ${CI_REGISTRY_IMAGE:-workshop}/inventory-service:local
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8080
+      # DB
+      DB_HOST: ${INV_DB_HOST:-inventory-db}
+      DB_PORT: ${INV_DB_PORT:-5432}
+      DB_NAME: ${INV_DB_NAME:-inventory}
+      DB_USER: ${INV_DB_USER:-inventory}
+      DB_PASS: ${INV_DB_PASS:-invpw}
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BROKER:-kafka:9092}
+      EVENT_NS: ${EVENT_NS:-orders.v1}
+      # Observability
+      OTEL_SERVICE_NAME: inventory-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_RESOURCE_ATTRIBUTES: env=${OTEL_RESOURCE_ENV:-workshop}
+      OTEL_INSTRUMENTATION_MESSAGING_PROPAGATORS: tracecontext,b3
+    ports:
+      - "${INV_SVC_PORT:-8082}:8080"
+    networks:
+      - eda-net
+
+  fulfillment-service:
+    build:
+      context: ./fulfillment-service
+    image: ${CI_REGISTRY_IMAGE:-workshop}/fulfillment-service:local
+    depends_on:
+      fulfillment-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8080
+      # DB
+      DB_HOST: ${FUL_DB_HOST:-fulfillment-db}
+      DB_PORT: ${FUL_DB_PORT:-5432}
+      DB_NAME: ${FUL_DB_NAME:-fulfillment}
+      DB_USER: ${FUL_DB_USER:-fulfillment}
+      DB_PASS: ${FUL_DB_PASS:-fulpw}
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BROKER:-kafka:9092}
+      EVENT_NS: ${EVENT_NS:-orders.v1}
+      # Observability
+      OTEL_SERVICE_NAME: fulfillment-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_RESOURCE_ATTRIBUTES: env=${OTEL_RESOURCE_ENV:-workshop}
+      OTEL_INSTRUMENTATION_MESSAGING_PROPAGATORS: tracecontext,b3
+    ports:
+      - "${FUL_SVC_PORT:-8083}:8080"
+    networks:
+      - eda-net
+
+  # 외부 연동 API 시뮬레이터(결제)
+  payment-adapter-ext:
+    build:
+      context: ./payment-adapter-ext
+    image: ${CI_REGISTRY_IMAGE:-workshop}/payment-adapter-ext:local
+    environment:
+      SERVER_PORT: 9090
+      DEFAULT_FAIL_RATE: "0"   # 0~100 (%)
+    ports:
+      - "${PAY_ADAPTER_PORT:-9090}:9090"
+    networks:
+      - eda-net

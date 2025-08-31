@@ -1,0 +1,13 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints.web.exposure.include: health,info
+
+logging:
+  level:
+    com.workshop.payment: INFO
+
+app:
+  payment:
+    default-fail-rate: ${DEFAULT_FAIL_RATE:0}  # 0~100 (%)

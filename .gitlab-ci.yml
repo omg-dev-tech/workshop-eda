@@ -40,8 +40,7 @@ deploy:
     url: https://$GKE_CLUSTER
   before_script:
     # SA 로그인
-    - echo "$GCP_SA_KEY" > sa.json
-    - gcloud auth activate-service-account --key-file=sa.json
+    - gcloud auth activate-service-account --key-file="$GCP_SA_KEY"
     - gcloud config set project "$GCP_PROJECT"
     - >
       if [[ "$GKE_LOCATION" == *"-"* ]]; then

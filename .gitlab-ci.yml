@@ -200,8 +200,5 @@ deploy:
       YAML
 
   script:
-    - helm upgrade --install "${HELM_RELEASE_PREFIX}-eda" ./helm/workshop-eda \
-        --namespace "$K8S_NAMESPACE" \
-        -f values-ci.yaml
-
+    - helm upgrade --install "${HELM_RELEASE_PREFIX}-eda" ./helm/workshop-eda --namespace "$K8S_NAMESPACE" -f values-ci.yaml
     - kubectl -n "$K8S_NAMESPACE" get deploy,svc

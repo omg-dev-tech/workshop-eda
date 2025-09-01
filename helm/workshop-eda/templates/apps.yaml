@@ -45,12 +45,12 @@ spec:
             {{- end }}
           readinessProbe:
             httpGet: { path: /actuator/health, port: {{ default 8080 $cfg.service.port }} }
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 100
+            periodSeconds: 60
           livenessProbe:
             httpGet: { path: /actuator/health, port: {{ default 8080 $cfg.service.port }} }
-            initialDelaySeconds: 10
-            periodSeconds: 20
+            initialDelaySeconds: 200
+            periodSeconds: 120
           resources:
             requests: { cpu: "100m", memory: "256Mi" }
             limits:   { cpu: "500m", memory: "512Mi" }

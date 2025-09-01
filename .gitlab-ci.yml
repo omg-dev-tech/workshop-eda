@@ -39,6 +39,7 @@ deploy:
     name: production
     url: https://$GKE_CLUSTER
   before_script:
+    - gcloud components install kubectl gke-gcloud-auth-plugin -q
     # SA 로그인
     - gcloud auth activate-service-account --key-file="$GCP_SA_KEY"
     - gcloud config set project "$GCP_PROJECT"
@@ -51,6 +52,9 @@ deploy:
 
     # 네임스페이스 보장
     - kubectl get ns "$K8S_NAMESPACE" || kubectl create ns "$K8S_NAMESPACE"
+
+     # 3) 헬름이 없다면 설치
+    - helm version || curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
     # --- 앱용 Secrets 생성/갱신 (stringData 사용; idempotent)
     - |

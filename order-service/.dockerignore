@@ -1,0 +1,10 @@
+**/.gradle
+**/build
+**/.idea
+**/.vscode
+.gradle
+build
+.git
+.gitignore
+Dockerfile*
+README.md

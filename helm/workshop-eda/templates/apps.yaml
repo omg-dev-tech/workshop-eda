@@ -39,8 +39,6 @@ spec:
           {{- end }}
 
           env:
-            - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "{{ $global.kafkaBootstrap }}"
             {{- range $k, $v := $cfg.env }}
             - name: {{ $k }}
               value: "{{ $v }}"

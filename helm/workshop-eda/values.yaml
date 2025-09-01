@@ -1,0 +1,7 @@
+global:
+  imageRegistry: ""
+  imageTag: "latest"
+  imagePullSecret: ""
+  kafkaBootstrap: "localhost:9092"
+
+apps: {}  # values-ci.yaml에서 채움

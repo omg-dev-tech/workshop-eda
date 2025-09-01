@@ -1,0 +1,5 @@
+apiVersion: v2
+name: workshop-eda
+version: 0.1.0
+description: EDA demo (api-gateway, order, inventory, fulfillment, payment)
+type: application

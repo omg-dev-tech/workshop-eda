@@ -1,0 +1,139 @@
+stages: [build, deploy]
+
+# --- 공통 변수
+variables:
+  DOCKER_BUILDKIT: "1"
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+
+# --- BUILD (Docker buildx; Runner가 privileged 허용일 때)
+build:
+  stage: build
+  image: docker:24
+  services:
+    - name: docker:24-dind
+      command: ["--mtu=1460"]
+  script:
+    - echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+
+    # 서비스별 빌드/푸시
+    - docker build -t "$CI_REGISTRY_IMAGE/order-service:$IMAGE_TAG"        order-service
+    - docker push    "$CI_REGISTRY_IMAGE/order-service:$IMAGE_TAG"
+
+    - docker build -t "$CI_REGISTRY_IMAGE/inventory-service:$IMAGE_TAG"    inventory-service
+    - docker push    "$CI_REGISTRY_IMAGE/inventory-service:$IMAGE_TAG"
+
+    - docker build -t "$CI_REGISTRY_IMAGE/fulfillment-service:$IMAGE_TAG"  fulfillment-service
+    - docker push    "$CI_REGISTRY_IMAGE/fulfillment-service:$IMAGE_TAG"
+
+    - docker build -t "$CI_REGISTRY_IMAGE/api-gateway:$IMAGE_TAG"          api-gateway
+    - docker push    "$CI_REGISTRY_IMAGE/api-gateway:$IMAGE_TAG"
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+# --- DEPLOY (gcloud + kubectl + helm)
+deploy:
+  stage: deploy
+  image: gcr.io/google.com/cloudsdktool/google-cloud-cli:alpine
+  needs: [build]
+  environment:
+    name: production
+    url: https://$GKE_CLUSTER
+  before_script:
+    # SA 로그인
+    - echo "$GCP_SA_KEY" > sa.json
+    - gcloud auth activate-service-account --key-file=sa.json
+    - gcloud config set project "$GCP_PROJECT"
+    - >
+      if [[ "$GKE_LOCATION" == *"-"* ]]; then
+        gcloud container clusters get-credentials "$GKE_CLUSTER" --zone "$GKE_LOCATION"
+      else
+        gcloud container clusters get-credentials "$GKE_CLUSTER" --region "$GKE_LOCATION"
+      fi
+
+    # 네임스페이스 보장
+    - kubectl get ns "$K8S_NAMESPACE" || kubectl create ns "$K8S_NAMESPACE"
+
+    # --- 앱용 Secrets 생성/갱신 (stringData 사용; idempotent)
+    - |
+      cat <<EOF | kubectl -n "$K8S_NAMESPACE" apply -f -
+      apiVersion: v1
+      kind: Secret
+      metadata: { name: orders-db }
+      type: Opaque
+      stringData:
+        DB_HOST: "${POSTGRES_HOST}"
+        DB_PORT: "${POSTGRES_PORT}"
+        DB_NAME: "${ORDERS_DB_NAME}"
+        DB_USER: "${ORDERS_DB_USER}"
+        DB_PASS: "${ORDERS_DB_PASS}"
+      ---
+      apiVersion: v1
+      kind: Secret
+      metadata: { name: inventory-db }
+      type: Opaque
+      stringData:
+        DB_HOST: "${POSTGRES_HOST}"
+        DB_PORT: "${POSTGRES_PORT}"
+        DB_NAME: "${INV_DB_NAME}"
+        DB_USER: "${INV_DB_USER}"
+        DB_PASS: "${INV_DB_PASS}"
+      ---
+      apiVersion: v1
+      kind: Secret
+      metadata: { name: fulfillment-db }
+      type: Opaque
+      stringData:
+        DB_HOST: "${POSTGRES_HOST}"
+        DB_PORT: "${POSTGRES_PORT}"
+        DB_NAME: "${FUL_DB_NAME}"
+        DB_USER: "${FUL_DB_USER}"
+        DB_PASS: "${FUL_DB_PASS}"
+      EOF
+
+    # Kafka/공통 ENV를 ConfigMap으로
+    - |
+      cat <<EOF | kubectl -n "$K8S_NAMESPACE" apply -f -
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: { name: app-common }
+      data:
+        KAFKA_BOOTSTRAP_SERVERS: "${KAFKA_BOOTSTRAP}"
+        EVENT_NS: "${EVENT_NS}"
+        OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+        OTEL_RESOURCE_ENV: "${OTEL_RESOURCE_ENV}"
+      EOF
+
+  script:
+    # --- Helm 배포 (서비스별 values는 필요 최소만 예시)
+    - |
+      helm upgrade --install ${HELM_RELEASE_PREFIX}-order ./charts/order-service \
+        --namespace "$K8S_NAMESPACE" \
+        --set image.repository="$CI_REGISTRY_IMAGE/order-service" \
+        --set image.tag="$IMAGE_TAG" \
+        --set envFromSecrets[0].name="orders-db" \
+        --set envFromConfigMaps[0].name="app-common"
+
+    - |
+      helm upgrade --install ${HELM_RELEASE_PREFIX}-inventory ./charts/inventory-service \
+        --namespace "$K8S_NAMESPACE" \
+        --set image.repository="$CI_REGISTRY_IMAGE/inventory-service" \
+        --set image.tag="$IMAGE_TAG" \
+        --set envFromSecrets[0].name="inventory-db" \
+        --set envFromConfigMaps[0].name="app-common"
+
+    - |
+      helm upgrade --install ${HELM_RELEASE_PREFIX}-fulfillment ./charts/fulfillment-service \
+        --namespace "$K8S_NAMESPACE" \
+        --set image.repository="$CI_REGISTRY_IMAGE/fulfillment-service" \
+        --set image.tag="$IMAGE_TAG" \
+        --set envFromSecrets[0].name="fulfillment-db" \
+        --set envFromConfigMaps[0].name="app-common"
+
+    - |
+      helm upgrade --install ${HELM_RELEASE_PREFIX}-api ./charts/api-gateway \
+        --namespace "$K8S_NAMESPACE" \
+        --set image.repository="$CI_REGISTRY_IMAGE/api-gateway" \
+        --set image.tag="$IMAGE_TAG" \
+        --set envFromConfigMaps[0].name="app-common"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

@@ -25,6 +25,19 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ default 8080 $cfg.service.port }}
+
+          {{- if or $cfg.envFromSecrets $cfg.envFromConfigMaps }}
+          envFrom:
+            {{- range $cfg.envFromSecrets }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+            {{- range $cfg.envFromConfigMaps }}
+            - configMapRef:
+                name: {{ . }}
+            {{- end }}
+          {{- end }}
+
           env:
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "{{ $global.kafkaBootstrap }}"

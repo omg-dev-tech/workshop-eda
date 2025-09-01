@@ -163,43 +163,45 @@ deploy:
         OTEL_RESOURCE_ENV: "${OTEL_RESOURCE_ENV}"
         PAYMENT_BASE_URL: "http://payment-adapter-ext:9090"
       EOF
+    
+    # --- values-ci.yaml 생성 (Umbrella 차트에 주입) ---
+    - |
+      cat > values-ci.yaml <<'YAML'
+      global:
+        imageRegistry: "${CI_REGISTRY_IMAGE}"
+        imageTag: "${BRANCH_TAG}"
+        kafkaBootstrap: "${KAFKA_BOOTSTRAP}"
+
+      apps:
+        order-service:
+          service: { port: 8080 }
+          envFromSecrets: [ "orders-db" ]
+          envFromConfigMaps: [ "app-common" ]
+        inventory-service:
+          service: { port: 8080 }
+          envFromSecrets: [ "inventory-db" ]
+          envFromConfigMaps: [ "app-common" ]
+        fulfillment-service:
+          service: { port: 8080 }
+          envFromSecrets: [ "fulfillment-db" ]
+          envFromConfigMaps: [ "app-common" ]
+        api-gateway:
+          service:
+            port: 8080
+            type: LoadBalancer   # 필요시 NodePort/ClusterIP로
+          envFromConfigMaps: [ "app-common" ]
+          env:
+            ORDER_SERVICE_URL: "http://order-service:8080"
+
+        payment-adapter-ext:
+          service: { port: 9090 }
+          env:
+            DEFAULT_FAIL_RATE: "${PAYMENT_FAIL_RATE:-0}"
+      YAML
 
   script:
-    # 배포 시에는 '브랜치 latest' 태그 사용 → 빌드 스킵이어도 직전 이미지로 배포 가능
-    - |
-      helm upgrade --install ${HELM_RELEASE_PREFIX}-order ./charts/order-service \
+    - helm upgrade --install "${HELM_RELEASE_PREFIX}-eda" ./helm/workshop-eda \
         --namespace "$K8S_NAMESPACE" \
-        --set image.repository="$CI_REGISTRY_IMAGE/order-service" \
-        --set image.tag="$BRANCH_TAG" \
-        --set envFromSecrets[0].name="orders-db" \
-        --set envFromConfigMaps[0].name="app-common"
+        -f values-ci.yaml
 
-    - |
-      helm upgrade --install ${HELM_RELEASE_PREFIX}-inventory ./charts/inventory-service \
-        --namespace "$K8S_NAMESPACE" \
-        --set image.repository="$CI_REGISTRY_IMAGE/inventory-service" \
-        --set image.tag="$BRANCH_TAG" \
-        --set envFromSecrets[0].name="inventory-db" \
-        --set envFromConfigMaps[0].name="app-common"
-
-    - |
-      helm upgrade --install ${HELM_RELEASE_PREFIX}-fulfillment ./charts/fulfillment-service \
-        --namespace "$K8S_NAMESPACE" \
-        --set image.repository="$CI_REGISTRY_IMAGE/fulfillment-service" \
-        --set image.tag="$BRANCH_TAG" \
-        --set envFromSecrets[0].name="fulfillment-db" \
-        --set envFromConfigMaps[0].name="app-common"
-
-    - |
-      helm upgrade --install ${HELM_RELEASE_PREFIX}-api ./charts/api-gateway \
-        --namespace "$K8S_NAMESPACE" \
-        --set image.repository="$CI_REGISTRY_IMAGE/api-gateway" \
-        --set image.tag="$BRANCH_TAG" \
-        --set envFromConfigMaps[0].name="app-common"
-
-    - |
-      helm upgrade --install ${HELM_RELEASE_PREFIX}-payment ./charts/payment-adapter-ext \
-        --namespace "$K8S_NAMESPACE" \
-        --set image.repository="$CI_REGISTRY_IMAGE/payment-adapter-ext" \
-        --set image.tag="$BRANCH_TAG" \
-        --set env.DEFAULT_FAIL_RATE="${PAYMENT_FAIL_RATE:-10}"
+    - kubectl -n "$K8S_NAMESPACE" get deploy,svc

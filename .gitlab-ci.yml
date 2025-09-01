@@ -1,49 +1,103 @@
 stages: [build, deploy]
 
-# --- 공통 변수
 variables:
   DOCKER_BUILDKIT: "1"
   IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  BRANCH_TAG: "$CI_COMMIT_REF_SLUG-latest"   # 예: main-latest
 
-# --- BUILD (Docker buildx; Runner가 privileged 허용일 때)
-build:
+# -------------------------------
+# 공통 Docker 빌드 템플릿
+# -------------------------------
+.docker-build-template:
   stage: build
   image: docker:24
   services:
     - name: docker:24-dind
       command: ["--mtu=1460"]
-  script:
+  before_script:
     - echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-
-    # 서비스별 빌드/푸시
-    - docker build -t "$CI_REGISTRY_IMAGE/order-service:$IMAGE_TAG"        order-service
-    - docker push    "$CI_REGISTRY_IMAGE/order-service:$IMAGE_TAG"
-
-    - docker build -t "$CI_REGISTRY_IMAGE/inventory-service:$IMAGE_TAG"    inventory-service
-    - docker push    "$CI_REGISTRY_IMAGE/inventory-service:$IMAGE_TAG"
-
-    - docker build -t "$CI_REGISTRY_IMAGE/fulfillment-service:$IMAGE_TAG"  fulfillment-service
-    - docker push    "$CI_REGISTRY_IMAGE/fulfillment-service:$IMAGE_TAG"
-
-    - docker build -t "$CI_REGISTRY_IMAGE/api-gateway:$IMAGE_TAG"          api-gateway
-    - docker push    "$CI_REGISTRY_IMAGE/api-gateway:$IMAGE_TAG"
+  script:
+    - docker build -t "$IMAGE_NAME:$IMAGE_TAG" "$BUILD_CONTEXT"
+    - docker push "$IMAGE_NAME:$IMAGE_TAG"
+    - docker tag  "$IMAGE_NAME:$IMAGE_TAG" "$IMAGE_NAME:$BRANCH_TAG"
+    - docker push "$IMAGE_NAME:$BRANCH_TAG"
   rules:
-    - if: $CI_COMMIT_BRANCH
+    # 강제 빌드 스위치 (파이프라인 변수로 FORCE_BUILD=true 넣으면 무조건 빌드)
+    - if: '$FORCE_BUILD == "true"'
+    # 해당 서비스 디렉토리 변경시에만 빌드
+    - changes:
+      - $BUILD_CONTEXT/** 
+      - $BUILD_CONTEXT/Dockerfile
+    # 그 외는 스킵
+    - when: never
 
-# --- DEPLOY (gcloud + kubectl + helm)
+# -------------------------------
+# 서비스별 빌드 잡
+# -------------------------------
+build:order:
+  extends: .docker-build-template
+  variables:
+    IMAGE_NAME: "$CI_REGISTRY_IMAGE/order-service"
+    BUILD_CONTEXT: "order-service"
+
+build:inventory:
+  extends: .docker-build-template
+  variables:
+    IMAGE_NAME: "$CI_REGISTRY_IMAGE/inventory-service"
+    BUILD_CONTEXT: "inventory-service"
+
+build:fulfillment:
+  extends: .docker-build-template
+  variables:
+    IMAGE_NAME: "$CI_REGISTRY_IMAGE/fulfillment-service"
+    BUILD_CONTEXT: "fulfillment-service"
+
+build:api:
+  extends: .docker-build-template
+  variables:
+    IMAGE_NAME: "$CI_REGISTRY_IMAGE/api-gateway"
+    BUILD_CONTEXT: "api-gateway"
+
+build:payment-adapter:
+  extends: .docker-build-template
+  variables:
+    IMAGE_NAME: "$CI_REGISTRY_IMAGE/payment-adapter-ext"
+    BUILD_CONTEXT: "payment-adapter-ext"
+
+
+# -------------------------------
+# DEPLOY
+# -------------------------------
 deploy:
   stage: deploy
-  image: gcr.io/google.com/cloudsdktool/google-cloud-cli:alpine
-  needs: [build]
-  environment:
-    name: production
-    url: https://$GKE_CLUSTER
+  image: gcr.io/google.com/cloudsdktool/google-cloud-cli:latest   # Debian 기반 권장
+  variables:
+    CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
+    USE_GKE_GCLOUD_AUTH_PLUGIN: "True"
+  # 빌드가 전부 스킵이어도 배포는 항상 진행 (main에서만)
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
   before_script:
+    # kubectl & auth plugin 설치
     - gcloud components install kubectl gke-gcloud-auth-plugin -q
-    # SA 로그인
-    - gcloud auth activate-service-account --key-file="$GCP_SA_KEY"
-    - gcloud config set project "$GCP_PROJECT"
-    - >
+
+    # --- SA 키 처리: File/JSON/base64 모두 지원 ---
+    - |
+      set -euo pipefail
+      SA_JSON_PATH=""
+      if [ -f "${GCP_SA_KEY:-}" ]; then
+        SA_JSON_PATH="$GCP_SA_KEY"
+      elif printf '%s' "${GCP_SA_KEY:-}" | grep -q '^{'; then
+        printf '%s' "$GCP_SA_KEY" > sa.json; SA_JSON_PATH=sa.json
+      else
+        echo "$GCP_SA_KEY" | base64 -d > sa.json 2>/dev/null || printf '%s' "$GCP_SA_KEY" > sa.json
+        SA_JSON_PATH=sa.json
+      fi
+      [ -s "$SA_JSON_PATH" ] || { echo "ERROR: GCP_SA_KEY is empty. Check variable scope/protected."; exit 1; }
+
+      gcloud auth activate-service-account --key-file="$SA_JSON_PATH"
+      gcloud config set project "$GCP_PROJECT"
+
       if [[ "$GKE_LOCATION" == *"-"* ]]; then
         gcloud container clusters get-credentials "$GKE_CLUSTER" --zone "$GKE_LOCATION"
       else
@@ -53,10 +107,24 @@ deploy:
     # 네임스페이스 보장
     - kubectl get ns "$K8S_NAMESPACE" || kubectl create ns "$K8S_NAMESPACE"
 
-     # 3) 헬름이 없다면 설치
-    - helm version || curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    # --- Helm 설치(이미지 종류 자동 감지) ---
+    - |
+      if ! command -v helm >/dev/null 2>&1; then
+        if [ -f /etc/alpine-release ]; then
+          apk add --no-cache openssl curl tar gzip
+          export VERIFY_CHECKSUM=true
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | sh
+        else
+          apt-get update
+          apt-get install -y ca-certificates curl gnupg openssl tar gzip
+          curl -fsSL https://baltocdn.com/helm/signing.asc | gpg --dearmor -o /usr/share/keyrings/helm.gpg
+          echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" > /etc/apt/sources.list.d/helm-stable-debian.list
+          apt-get update && apt-get install -y helm
+        fi
+      fi
+    - helm version
 
-    # --- 앱용 Secrets 생성/갱신 (stringData 사용; idempotent)
+    # --- 앱용 Secrets (idempotent)
     - |
       cat <<EOF | kubectl -n "$K8S_NAMESPACE" apply -f -
       apiVersion: v1
@@ -93,7 +161,7 @@ deploy:
         DB_PASS: "${FUL_DB_PASS}"
       EOF
 
-    # Kafka/공통 ENV를 ConfigMap으로
+    # Kafka/공통 ENV ConfigMap
     - |
       cat <<EOF | kubectl -n "$K8S_NAMESPACE" apply -f -
       apiVersion: v1
@@ -104,15 +172,16 @@ deploy:
         EVENT_NS: "${EVENT_NS}"
         OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
         OTEL_RESOURCE_ENV: "${OTEL_RESOURCE_ENV}"
+        PAYMENT_BASE_URL: "http://payment-adapter-ext:9090"
       EOF
 
   script:
-    # --- Helm 배포 (서비스별 values는 필요 최소만 예시)
+    # 배포 시에는 '브랜치 latest' 태그 사용 → 빌드 스킵이어도 직전 이미지로 배포 가능
     - |
       helm upgrade --install ${HELM_RELEASE_PREFIX}-order ./charts/order-service \
         --namespace "$K8S_NAMESPACE" \
         --set image.repository="$CI_REGISTRY_IMAGE/order-service" \
-        --set image.tag="$IMAGE_TAG" \
+        --set image.tag="$BRANCH_TAG" \
         --set envFromSecrets[0].name="orders-db" \
         --set envFromConfigMaps[0].name="app-common"
 
@@ -120,7 +189,7 @@ deploy:
       helm upgrade --install ${HELM_RELEASE_PREFIX}-inventory ./charts/inventory-service \
         --namespace "$K8S_NAMESPACE" \
         --set image.repository="$CI_REGISTRY_IMAGE/inventory-service" \
-        --set image.tag="$IMAGE_TAG" \
+        --set image.tag="$BRANCH_TAG" \
         --set envFromSecrets[0].name="inventory-db" \
         --set envFromConfigMaps[0].name="app-common"
 
@@ -128,7 +197,7 @@ deploy:
       helm upgrade --install ${HELM_RELEASE_PREFIX}-fulfillment ./charts/fulfillment-service \
         --namespace "$K8S_NAMESPACE" \
         --set image.repository="$CI_REGISTRY_IMAGE/fulfillment-service" \
-        --set image.tag="$IMAGE_TAG" \
+        --set image.tag="$BRANCH_TAG" \
         --set envFromSecrets[0].name="fulfillment-db" \
         --set envFromConfigMaps[0].name="app-common"
 
@@ -136,7 +205,12 @@ deploy:
       helm upgrade --install ${HELM_RELEASE_PREFIX}-api ./charts/api-gateway \
         --namespace "$K8S_NAMESPACE" \
         --set image.repository="$CI_REGISTRY_IMAGE/api-gateway" \
-        --set image.tag="$IMAGE_TAG" \
+        --set image.tag="$BRANCH_TAG" \
         --set envFromConfigMaps[0].name="app-common"
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+
+    - |
+      helm upgrade --install ${HELM_RELEASE_PREFIX}-payment ./charts/payment-adapter-ext \
+        --namespace "$K8S_NAMESPACE" \
+        --set image.repository="$CI_REGISTRY_IMAGE/payment-adapter-ext" \
+        --set image.tag="$BRANCH_TAG" \
+        --set env.DEFAULT_FAIL_RATE="${PAYMENT_FAIL_RATE:-10}"

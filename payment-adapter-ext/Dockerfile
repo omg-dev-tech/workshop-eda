@@ -26,5 +26,5 @@ ENV TZ=Asia/Seoul \
 # (gradle bootJar 결과가 1개라고 가정)
 COPY --from=build /workspace/build/libs/*.jar /app/app.jar
 
-EXPOSE 8080
+EXPOSE 9090
 ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]

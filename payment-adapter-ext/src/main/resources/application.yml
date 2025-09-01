@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8080}
+  port: 9090
 
 management:
   endpoints.web.exposure.include: health,info
@@ -10,4 +10,4 @@ logging:
 
 app:
   payment:
-    default-fail-rate: ${DEFAULT_FAIL_RATE:0}  # 0~100 (%)
+    default-fail-rate: ${DEFAULT_FAIL_RATE:10}  # 0~100 (%)

@@ -78,24 +78,13 @@ deploy:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   before_script:
-    # kubectl & auth plugin 설치
-    - gcloud components install kubectl gke-gcloud-auth-plugin -q
+    # --- kubectl & GKE auth plugin (components install 대신 apt 사용) ---
+    - apt-get update
+    - apt-get install -y kubectl google-cloud-cli-gke-gcloud-auth-plugin
 
     # --- SA 키 처리: File/JSON/base64 모두 지원 ---
     - |
-      set -euo pipefail
-      SA_JSON_PATH=""
-      if [ -f "${GCP_SA_KEY:-}" ]; then
-        SA_JSON_PATH="$GCP_SA_KEY"
-      elif printf '%s' "${GCP_SA_KEY:-}" | grep -q '^{'; then
-        printf '%s' "$GCP_SA_KEY" > sa.json; SA_JSON_PATH=sa.json
-      else
-        echo "$GCP_SA_KEY" | base64 -d > sa.json 2>/dev/null || printf '%s' "$GCP_SA_KEY" > sa.json
-        SA_JSON_PATH=sa.json
-      fi
-      [ -s "$SA_JSON_PATH" ] || { echo "ERROR: GCP_SA_KEY is empty. Check variable scope/protected."; exit 1; }
-
-      gcloud auth activate-service-account --key-file="$SA_JSON_PATH"
+      gcloud auth activate-service-account --key-file="$GCP_SA_KEY"
       gcloud config set project "$GCP_PROJECT"
 
       if [[ "$GKE_LOCATION" == *"-"* ]]; then

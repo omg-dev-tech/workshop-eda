@@ -163,6 +163,15 @@ deploy:
         OTEL_RESOURCE_ENV: "${OTEL_RESOURCE_ENV}"
         PAYMENT_BASE_URL: "http://payment-adapter-ext:9090"
       EOF
+
+    - |
+      cat <<EOF | kubectl -n "$K8S_NAMESPACE" apply -f -
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: { name: app-payment }
+      data:
+        DEFAULT_FAIL_RATE: "${PAYMENT_FAIL_RATE:-0}"
+      EOF
     
     # --- values-ci.yaml 생성 (Umbrella 차트에 주입) ---
     - |
@@ -195,8 +204,7 @@ deploy:
 
         payment-adapter-ext:
           service: { port: 9090 }
-          env:
-            DEFAULT_FAIL_RATE: "${PAYMENT_FAIL_RATE:-0}"
+          envFromConfigMaps: [ "app-payment" ]
       YAML
 
   script:

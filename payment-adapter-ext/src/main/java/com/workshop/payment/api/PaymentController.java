@@ -6,7 +6,9 @@ import com.workshop.payment.model.PaymentResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
 import java.util.UUID;
@@ -43,11 +45,16 @@ public class PaymentController {
       if (!authorized) reason = "RANDOM_DECLINE";
     }
 
-    String authId = authorized ? "pay-" + UUID.randomUUID() : null;
+    if (!authorized) {
+      log.warn("PAYMENT DECLINED orderId={} reason={}", req.orderId(), reason);
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, reason);
+    }
+
+    String authId = "pay-" + UUID.randomUUID();
     var res = new PaymentResponse(
-        authorized ? "AUTHORIZED" : "DECLINED",
+        "AUTHORIZED",
         authId,
-        reason,
+        null,
         System.currentTimeMillis()
     );
 

@@ -200,7 +200,7 @@ deploy:
       YAML
 
   script:
-    - export IMAGE_TAG="${CI_COMMIT_TAG}-latest"
+    - export IMAGE_TAG="${CI_COMMIT_TAG:-${CI_COMMIT_REF_SLUG:-$CI_COMMIT_SHORT_SHA}}-latest"
     - |
       helm upgrade --install "${HELM_RELEASE_PREFIX}-eda" ./helm/workshop-eda --namespace "$K8S_NAMESPACE" \
       --set global.imageRegistry="$CI_REGISTRY_IMAGE" \

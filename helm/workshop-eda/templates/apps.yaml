@@ -22,7 +22,7 @@ spec:
       containers:
         - name: {{ $name }}
           image: "{{ $global.imageRegistry }}/{{ $name }}:{{ $global.imageTag }}"
-          imagePullPolicy: always
+          imagePullPolicy: Always
           ports:
             - containerPort: {{ default 8080 $cfg.service.port }}
 

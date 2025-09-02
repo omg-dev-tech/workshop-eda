@@ -28,12 +28,12 @@ public class PaymentClient {
    *  - errorMode=false면 기존처럼 DECLINED 매핑
    */
   public PaymentResponse authorize(PaymentRequest req, boolean forceFail) {
+    // ✅ 절대 URL을 안전하게 구성 (중복/누락 슬래시 방지)
+    String url = (baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length()-1) : baseUrl)
+               + "/payments/authorize";
     try {
       var spec = rest.post()
-          .uri(builder -> builder
-              .scheme(null) // baseUrl에 포함되어 있으므로
-              .path(baseUrl + "/payments/authorize")
-              .build());
+          .uri(url);
 
       var requestSpec = spec
           .contentType(MediaType.APPLICATION_JSON)

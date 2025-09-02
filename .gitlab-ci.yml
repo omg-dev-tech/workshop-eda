@@ -161,6 +161,7 @@ deploy:
         OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
         OTEL_RESOURCE_ENV: "${OTEL_RESOURCE_ENV}"
         PAYMENT_BASE_URL: "http://payment-adapter-ext:9090"
+        PAYMENT_ERROR_MODE: "true"
       EOF
 
     - |

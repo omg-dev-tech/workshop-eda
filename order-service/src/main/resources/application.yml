@@ -39,4 +39,5 @@ app:
     failed-topic:     ${EVENT_NS:orders.v1}.payment_failed
 
 payment:
-  base-url: ${PAYMENT_BASE_URL:http://localhost:9090} 
+  base-url: ${PAYMENT_BASE_URL:http://localhost:9090}
+  error-mode: ${PAYMENT_ERROR_MODE:false}

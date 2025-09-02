@@ -217,16 +217,8 @@ deploy:
     - kubectl -n "$K8S_NAMESPACE" get deploy,svc
     # release marker
     - |
-      START_TS=$(date +%s%3N)
+      START_TS=$(date -u +%s%N)
       curl --location -k --request POST "${INSTANA_BASE_URL}/api/releases" \
         --header "Authorization: apiToken ${INSTANA_API_TOKEN}" \
         --header "Content-Type: application/json" \
-        --data "{
-          \"name\": \"${CI_COMMIT_SHA}\",
-          \"start\": ${START_TS},
-          \"applications\" : [
-            {
-              \"name\": \"LG-workshop\",
-            }
-          ]
-        }"
+        --data "{ \"name\": \"${CI_COMMIT_SHA}\",\"start\": ${START_TS},\"applications\" : [{\"name\": \"TXC LG Hands-On\"}]}"

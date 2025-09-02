@@ -216,7 +216,7 @@ deploy:
       -f values-ci.yaml
     - kubectl -n "$K8S_NAMESPACE" get deploy,svc
     # release marker
-    - START_TS=$(date -u +%s%N)
+    - START_TS=$(date -u +%s%3N)
     - echo "$START_TS"
     - echo "$INSTANA_BASE_URL"
     - echo "$CI_COMMIT_SHORT_SHA"

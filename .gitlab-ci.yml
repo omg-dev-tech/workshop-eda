@@ -220,8 +220,8 @@ deploy:
     - echo "$START_TS"
     - echo "$INSTANA_BASE_URL"
     - echo "$CI_COMMIT_SHORT_SHA"
-    - |
-      curl --location -k --request POST "${INSTANA_BASE_URL}/api/releases" \
-        --header "Authorization: apiToken ${INSTANA_API_TOKEN}" \
-        --header "Content-Type: application/json" \
-        --data "{ \"name\": \"$CI_COMMIT_SHORT_SHA\",\"start\": ${START_TS},\"applications\": [{ \"name\": \"TXC LG Hands-On\" }]}"
+   # - |
+   #   curl --location -k --request POST "${INSTANA_BASE_URL}/api/releases" \
+   #     --header "Authorization: apiToken ${INSTANA_API_TOKEN}" \
+   #     --header "Content-Type: application/json" \
+   #     --data "{ \"name\": \"$CI_COMMIT_SHORT_SHA\",\"start\": ${START_TS},\"applications\": [{ \"name\": \"TXC LG Hands-On\" }]}"

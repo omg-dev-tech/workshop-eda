@@ -33,7 +33,6 @@ public class PaymentClient {
           .uri(builder -> builder
               .scheme(null) // baseUrl에 포함되어 있으므로
               .path(baseUrl + "/payments/authorize")
-              .apply(b -> {}) // no-op
               .build());
 
       var requestSpec = spec
@@ -58,7 +57,7 @@ public class PaymentClient {
               throw new RestClientResponseException(
                   "Payment unauthorized",
                   res.getStatusCode().value(),
-                  res.getStatusCode().getReasonPhrase(),
+                  "",
                   res.getHeaders(),
                   res.getBody() != null ? res.getBody().readAllBytes() : null,
                   null

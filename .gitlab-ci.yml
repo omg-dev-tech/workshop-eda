@@ -26,8 +26,7 @@ variables:
     - if: '$FORCE_BUILD == "true"'
     # 해당 서비스 디렉토리 변경시에만 빌드
     - changes:
-      - $BUILD_CONTEXT/** 
-      - $BUILD_CONTEXT/Dockerfile
+      - $BUILD_CONTEXT/**
     # 그 외는 스킵
     - when: never
 

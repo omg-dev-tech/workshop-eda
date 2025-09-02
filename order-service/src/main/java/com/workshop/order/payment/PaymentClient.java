@@ -30,6 +30,7 @@ public class PaymentClient {
       String reason = ex.getResponseBodyAsString();
       if (reason == null || reason.isBlank()) {
         reason = ex.getStatusText(); // e.g., "Unauthorized"
+        throw new Exception();
       }
       return new PaymentResponse(
           "DECLINED",

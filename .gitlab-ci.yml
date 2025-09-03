@@ -171,6 +171,7 @@ deploy:
       metadata: { name: app-payment }
       data:
         DEFAULT_FAIL_RATE: "${PAYMENT_FAIL_RATE:-0}"
+        PAYMENT_ERROR_MODE: "true"
       EOF
     
     # --- values-ci.yaml 생성 (Umbrella 차트에 주입) ---

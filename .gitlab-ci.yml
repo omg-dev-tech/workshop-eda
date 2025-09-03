@@ -95,20 +95,64 @@ deploy:
     # 네임스페이스 보장
     - kubectl get ns "$K8S_NAMESPACE" || kubectl create ns "$K8S_NAMESPACE"
 
-    # --- Helm 설치(이미지 종류 자동 감지) ---
+    # --- Helm 설치(이미지 종류 자동 감지; APT repo 사용 안 함) ---
     - |
+      set -euo pipefail
+
+      # (안전) 혹시 이전 단계에서 남아있을지 모를 Helm APT 소스 제거
+      rm -f /etc/apt/sources.list.d/helm-stable-debian.list || true
+
       if ! command -v helm >/dev/null 2>&1; then
+        # 선행 패키지
         if [ -f /etc/alpine-release ]; then
-          apk add --no-cache openssl curl tar gzip
-          export VERIFY_CHECKSUM=true
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | sh
+          apk add --no-cache ca-certificates curl tar gzip openssl
         else
           apt-get update
-          apt-get install -y ca-certificates curl gnupg openssl tar gzip
-          echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" > /etc/apt/sources.list.d/helm-stable-debian.list
-          apt-get update && apt-get install -y helm
+          apt-get install -y ca-certificates curl tar gzip openssl
         fi
+
+        : "${HELM_VERSION:=v3.15.4}"
+
+        OS="$(uname | tr '[:upper:]' '[:lower:]')"
+        ARCH="$(uname -m)"
+        case "$ARCH" in
+          x86_64)  ARCH="amd64" ;;
+          aarch64) ARCH="arm64" ;;
+          armv7l)  ARCH="arm" ;;
+          *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;;
+        esac
+
+        TARBALL="helm-${HELM_VERSION}-${OS}-${ARCH}.tar.gz"
+        BASEURL="https://get.helm.sh"
+        TMPDIR="$(mktemp -d)"
+        trap 'rm -rf "$TMPDIR"' EXIT
+
+        echo "→ Download Helm ${HELM_VERSION} ${OS}/${ARCH}"
+        curl -fL --retry 5 --retry-connrefused --retry-delay 2 \
+          -o "${TMPDIR}/${TARBALL}" "${BASEURL}/${TARBALL}"
+
+        echo "→ Download checksum"
+        curl -fL --retry 5 --retry-connrefused --retry-delay 2 \
+          -o "${TMPDIR}/sha256.txt" "${BASEURL}/helm-${HELM_VERSION}-sha256sum.txt"
+
+        echo "→ Verify checksum"
+        (cd "$TMPDIR" && sha256sum -c --ignore-missing sha256.txt | grep "${TARBALL}: OK")
+
+        echo "→ Extract & install"
+        tar -xzf "${TMPDIR}/${TARBALL}" -C "${TMPDIR}"
+
+        TARGET_DIR="/usr/local/bin"
+        if [ ! -w "$TARGET_DIR" ]; then
+          TARGET_DIR="$CI_PROJECT_DIR/bin"
+          mkdir -p "$TARGET_DIR"
+          # GitLab CI에서 현재 셸 세션 PATH 주입
+          echo "export PATH=\"$TARGET_DIR:\$PATH\"" >> "$BASH_ENV" 2>/dev/null || true
+          export PATH="$TARGET_DIR:$PATH"
+        fi
+
+        install -m 0755 "${TMPDIR}/${OS}-${ARCH}/helm" "${TARGET_DIR}/helm"
       fi
+
     - helm version
 
     # --- 앱용 Secrets (idempotent)

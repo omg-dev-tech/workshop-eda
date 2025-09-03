@@ -47,7 +47,12 @@ public class PaymentController {
 
     if (!authorized) {
       log.warn("PAYMENT DECLINED orderId={} reason={}", req.orderId(), reason);
-      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, reason);
+      if (props.getErrorMode()) {
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, reason);
+      } else {
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, reason);
+      }
+      
     }
 
     String authId = "pay-" + UUID.randomUUID();

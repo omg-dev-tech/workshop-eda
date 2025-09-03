@@ -161,7 +161,7 @@ deploy:
         OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
         OTEL_RESOURCE_ENV: "${OTEL_RESOURCE_ENV}"
         PAYMENT_BASE_URL: "http://payment-adapter-ext:9090"
-        PAYMENT_ERROR_MODE: "true"
+        PAYMENT_ERROR_MODE: "false"
       EOF
 
     - |
@@ -171,7 +171,7 @@ deploy:
       metadata: { name: app-payment }
       data:
         DEFAULT_FAIL_RATE: "${PAYMENT_FAIL_RATE:-0}"
-        PAYMENT_ERROR_MODE: "true"
+        PAYMENT_ERROR_MODE: "false"
       EOF
     
     # --- values-ci.yaml 생성 (Umbrella 차트에 주입) ---
@@ -221,9 +221,9 @@ deploy:
     - echo "$START_TS"
     - echo "$INSTANA_BASE_URL"
     - echo "$CI_COMMIT_SHORT_SHA"
-   # - |
-   #   curl --location -k --request POST "${INSTANA_BASE_URL}/api/releases" \
-   #     --header "Authorization: apiToken ${INSTANA_API_TOKEN}" \
-   #     --header "Content-Type: application/json" \
-   #     --data "{ \"name\": \"$CI_COMMIT_SHORT_SHA\",\"start\": ${START_TS},\"applications\": [{ \"name\": \"TXC LG Hands-On\" }]}"
+    - |
+      curl --location -k --request POST "${INSTANA_BASE_URL}/api/releases" \
+        --header "Authorization: apiToken ${INSTANA_API_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{ \"name\": \"$CI_COMMIT_SHORT_SHA\",\"start\": ${START_TS},\"applications\": [{ \"name\": \"TXC LG Hands-On\" }]}"
     - kubectl -n "$K8S_NAMESPACE" rollout restart deploy payment-adapter-ext

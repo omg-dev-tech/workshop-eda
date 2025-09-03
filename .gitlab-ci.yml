@@ -97,7 +97,7 @@ deploy:
 
     # --- Helm 설치(이미지 종류 자동 감지; APT repo 사용 안 함) ---
     - |
-      set -euo pipefail
+      set -eo pipefail
 
       # (안전) 혹시 이전 단계에서 남아있을지 모를 Helm APT 소스 제거
       rm -f /etc/apt/sources.list.d/helm-stable-debian.list || true

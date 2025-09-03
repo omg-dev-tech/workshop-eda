@@ -131,12 +131,36 @@ deploy:
         curl -fL --retry 5 --retry-connrefused --retry-delay 2 \
           -o "${TMPDIR}/${TARBALL}" "${BASEURL}/${TARBALL}"
 
-        echo "→ Download checksum"
-        curl -fL --retry 5 --retry-connrefused --retry-delay 2 \
-          -o "${TMPDIR}/sha256.txt" "${BASEURL}/helm-${HELM_VERSION}-sha256sum.txt"
+        # --- Checksum 다운로드 (여러 후보 경로 시도) ---
+        CS_TMP="${TMPDIR}/cs.txt"
+        CANDIDATES=(
+          "${BASEURL}/${TARBALL}.sha256sum"                # 권장: 아키텍처별
+          "${BASEURL}/helm-${HELM_VERSION}-checksums.txt"  # 일부 릴리스에서 제공
+          "${BASEURL}/helm-${HELM_VERSION}-sha256sum.txt"  # 일부 릴리스에서 제공(지금 404)
+        )
 
-        echo "→ Verify checksum"
-        (cd "$TMPDIR" && sha256sum -c --ignore-missing sha256.txt | grep "${TARBALL}: OK")
+        ok=""
+        for url in "${CANDIDATES[@]}"; do
+          if curl -fL --retry 5 --retry-connrefused --retry-delay 2 -o "${CS_TMP}" "$url"; then
+            ok="$url"; break
+          fi
+        done
+
+        if [ -z "$ok" ]; then
+          echo "⚠️  체크섬 파일을 찾지 못했습니다. (tried: ${CANDIDATES[*]})" >&2
+          echo "    계속하려면 검증을 건너뛰거나 내부 미러를 사용하세요."
+          exit 1
+        fi
+        echo "→ Checksum from: $ok"
+
+        # --- Checksum 검증 ---
+        if [[ "$ok" == *".tar.gz.sha256sum" ]]; then
+          # 파일 하나짜리(.sha256sum) 형식: '<sha256>  <filename>'
+          (cd "${TMPDIR}" && sha256sum -c "$(basename "${CS_TMP}")" 2>/dev/null || sha256sum -c "${CS_TMP}")
+        else
+          # 멀티 엔트리 텍스트인 경우 해당 파일 라인만 골라 검증
+          (cd "${TMPDIR}" && grep "  ${TARBALL}\$" "${CS_TMP}" | sha256sum -c -)
+        fi
 
         echo "→ Extract & install"
         tar -xzf "${TMPDIR}/${TARBALL}" -C "${TMPDIR}"

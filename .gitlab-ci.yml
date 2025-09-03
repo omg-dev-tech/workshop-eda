@@ -105,7 +105,6 @@ deploy:
         else
           apt-get update
           apt-get install -y ca-certificates curl gnupg openssl tar gzip
-          curl -fsSL https://baltocdn.com/helm/signing.asc | gpg --dearmor -o /usr/share/keyrings/helm.gpg
           echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" > /etc/apt/sources.list.d/helm-stable-debian.list
           apt-get update && apt-get install -y helm
         fi

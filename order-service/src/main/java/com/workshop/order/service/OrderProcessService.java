@@ -97,6 +97,9 @@ public class OrderProcessService {
   @Transactional
   public void onInventoryRejected(InventoryRejectedEvent evt) {
     log.info("🟥 onInventoryRejected orderId={} reason={}", evt.orderId(), evt.reason());
+    taskA(evt);  // 01
+    taskB(evt);  // 02
+    taskC(evt);  // 03
     orders.findById(evt.orderId()).ifPresent(o -> {
       o.setStatus(OrderStatus.INVENTORY_REJECTED);
       orders.save(o);
@@ -149,6 +152,36 @@ public class OrderProcessService {
       index = 3
   )
   private void taskC(InventoryReservedEvent evt) {
+    sleep(100);
+  }
+
+  @BpEdge(
+      from  = "method-start",
+      to    = "method-taskA",
+      name  = "01. taskA (test)",
+      index = 1
+  )
+  private void taskA(InventoryRejectedEvent evt) {
+    sleep(100);
+  }
+
+  @BpEdge(
+      from  = "method-taskA",
+      to    = "method-taskB",
+      name  = "02. taskB (test)",
+      index = 2
+  )
+  private void taskB(InventoryRejectedEvent evt) {
+    sleep(100);
+  }
+
+  @BpEdge(
+      from  = "method-taskB",
+      to    = "method-taskC",
+      name  = "03. taskC (test)",
+      index = 3
+  )
+  private void taskC(InventoryRejectedEvent evt) {
     sleep(100);
   }
 

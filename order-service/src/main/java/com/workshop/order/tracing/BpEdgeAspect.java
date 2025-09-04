@@ -1,17 +1,25 @@
 package com.workshop.order.tracing;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.trace.*;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.*;
 import org.springframework.stereotype.Component;
+import io.opentelemetry.api.trace.*;
 
 @Aspect
 @Component
 public class BpEdgeAspect {
-  private final Tracer tracer = GlobalOpenTelemetry.getTracer("bp-edge");
+  private final Tracer tracer;
+
+  // ✅ 생성자 주입 (정적 초기화 금지)
+  public BpEdgeAspect(Tracer bpEdgeTracer) {
+    this.tracer = bpEdgeTracer;
+  }
   private static final ThreadLocal<Span> LAST_SERVER = new ThreadLocal<>();
 
   @Around("@annotation(edge)")

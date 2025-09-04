@@ -3,7 +3,9 @@ package com.workshop.order.tracing;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
 
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.resources.Resource;
@@ -14,13 +16,12 @@ import static io.opentelemetry.semconv.ServiceAttributes.SERVICE_NAME;
 
 @Configuration
 public class OtelConfig {
-    
     @Bean
     public OpenTelemetrySdk openTelemetry() {
         var exporter = OtlpGrpcSpanExporter.builder()
-            // Instana 에이전트 OTLP gRPC (클러스터라면 Service DNS 사용)
-            .setEndpoint(System.getenv().getOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT",
-                        "http://instana-agent.instana-agent:4317"))
+            .setEndpoint(System.getenv().getOrDefault(
+                "OTEL_EXPORTER_OTLP_ENDPOINT",
+                "http://instana-agent.instana-agent:4317"))
             .build();
 
         var provider = SdkTracerProvider.builder()
@@ -29,6 +30,15 @@ public class OtelConfig {
                 Attributes.of(SERVICE_NAME, "order-process"))))
             .build();
 
-        return OpenTelemetrySdk.builder().setTracerProvider(provider).buildAndRegisterGlobal();
+        // ✅ 글로벌은 여기서 "단 한 번" 등록
+        return OpenTelemetrySdk.builder()
+            .setTracerProvider(provider)
+            .buildAndRegisterGlobal();
+    }
+
+    // ✅ Aspect에 주입할 Tracer 빈
+    @Bean
+    public Tracer bpEdgeTracer(OpenTelemetry openTelemetry) {
+        return openTelemetry.getTracer("bp-edge");
     }
 }

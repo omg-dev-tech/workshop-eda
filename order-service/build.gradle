@@ -19,8 +19,16 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.kafka:spring-kafka'
     implementation "org.springframework.boot:spring-boot-starter-aop"
+
+    // OpenTelemetry SDK & OTLP Exporter (필수)
     implementation "io.opentelemetry:opentelemetry-api:1.44.1"
     implementation "io.opentelemetry:opentelemetry-context:1.44.1"
+    implementation "io.opentelemetry:opentelemetry-sdk:1.44.1"
+    implementation "io.opentelemetry:opentelemetry-sdk-trace:1.44.1"
+    implementation "io.opentelemetry:opentelemetry-exporter-otlp:1.44.1"
+    
+    // ✅ semconv는 이 좌표/버전, 그리고 'implementation'로 잡으세요
+    implementation "io.opentelemetry.semconv:opentelemetry-semconv:1.37.0"
 
     // AspectJ 런타임 & 위버(빌드용)
     aspect "org.aspectj:aspectjweaver:1.9.22.1"

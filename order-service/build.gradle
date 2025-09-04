@@ -2,6 +2,7 @@ plugins {
     id 'org.springframework.boot' version '3.3.2'
     id 'io.spring.dependency-management' version '1.1.6'
     id 'java'
+    id "io.freefair.aspectj.post-compile-weaving" version "8.6"  // PCW
 }
 
 group = 'com.workshop'
@@ -17,7 +18,14 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.kafka:spring-kafka'
-    
+    implementation "org.springframework.boot:spring-boot-starter-aop"
+    implementation "io.opentelemetry:opentelemetry-api:1.44.1"
+    implementation "io.opentelemetry:opentelemetry-context:1.44.1"
+
+    // AspectJ 런타임 & 위버(빌드용)
+    aspect "org.aspectj:aspectjweaver:1.9.22.1"
+    implementation "org.aspectj:aspectjrt:1.9.22.1"
+
     runtimeOnly 'org.postgresql:postgresql'
 
     // Lombok

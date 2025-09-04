@@ -1,5 +1,6 @@
 package com.workshop.order.service;
 
+import com.workshop.order.tracing.BpEdge;
 import com.workshop.order.domain.OrderEntity;
 import com.workshop.order.domain.OrderRepository;
 import com.workshop.order.domain.OrderStatus;
@@ -39,6 +40,9 @@ public class OrderProcessService {
   @Transactional
   public void onInventoryReserved(InventoryReservedEvent evt) {
     log.info("🟩 onInventoryReserved orderId={}", evt.orderId());
+    taskA(evt);  // 01
+    taskB(evt);  // 02
+    taskC(evt);  // 03
     orders.findById(evt.orderId()).ifPresent(o -> {
       o.setStatus(OrderStatus.INVENTORY_RESERVED);
       orders.save(o);
@@ -112,5 +116,43 @@ public class OrderProcessService {
       o.setStatus(OrderStatus.COMPLETED);
       orders.save(o);
     });
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // 테스트용 private 단계 메서드 3개 (각 100ms 지연, 내용 비움)
+  // ────────────────────────────────────────────────────────────────
+
+  @BpEdge(
+      from  = "method-start",
+      to    = "method-taskA",
+      name  = "01. taskA (test)",
+      index = 1
+  )
+  private void taskA(InventoryReservedEvent evt) {
+    sleep(100);
+  }
+
+  @BpEdge(
+      from  = "method-taskA",
+      to    = "method-taskB",
+      name  = "02. taskB (test)",
+      index = 2
+  )
+  private void taskB(InventoryReservedEvent evt) {
+    sleep(100);
+  }
+
+  @BpEdge(
+      from  = "method-taskB",
+      to    = "method-taskC",
+      name  = "03. taskC (test)",
+      index = 3
+  )
+  private void taskC(InventoryReservedEvent evt) {
+    sleep(100);
+  }
+
+  private void sleep(long ms) {
+    try { Thread.sleep(ms); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
   }
 }

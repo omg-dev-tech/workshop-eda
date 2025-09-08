@@ -1,7 +1,6 @@
 package com.workshop.order.service;
 
-import com.workshop.order.tracing.BpEdge;
-import com.workshop.order.domain.OrderEntity;
+import com.workshop.order.tracing.ServiceNode;
 import com.workshop.order.domain.OrderRepository;
 import com.workshop.order.domain.OrderStatus;
 import com.workshop.order.events.*;
@@ -125,62 +124,32 @@ public class OrderProcessService {
   // 테스트용 private 단계 메서드 3개 (각 100ms 지연, 내용 비움)
   // ────────────────────────────────────────────────────────────────
 
-  @BpEdge(
-      from  = "method-start",
-      to    = "method-taskA",
-      name  = "01. taskA (test)",
-      index = 1
-  )
+  @ServiceNode("vs.taskA")  
   private void taskA(InventoryReservedEvent evt) {
     sleep(100);
   }
 
-  @BpEdge(
-      from  = "method-taskA",
-      to    = "method-taskB",
-      name  = "02. taskB (test)",
-      index = 2
-  )
+  @ServiceNode("vs.taskB")
   private void taskB(InventoryReservedEvent evt) {
     sleep(100);
   }
 
-  @BpEdge(
-      from  = "method-taskB",
-      to    = "method-taskC",
-      name  = "03. taskC (test)",
-      index = 3
-  )
+  @ServiceNode("vs.taskC")
   private void taskC(InventoryReservedEvent evt) {
     sleep(100);
   }
 
-  @BpEdge(
-      from  = "method-start",
-      to    = "method-taskA",
-      name  = "01. taskA (test)",
-      index = 1
-  )
+  @ServiceNode("vs.taskA")
   private void taskA(InventoryRejectedEvent evt) {
     sleep(100);
   }
 
-  @BpEdge(
-      from  = "method-taskA",
-      to    = "method-taskB",
-      name  = "02. taskB (test)",
-      index = 2
-  )
+  @ServiceNode("vs.taskB")
   private void taskB(InventoryRejectedEvent evt) {
     sleep(100);
   }
 
-  @BpEdge(
-      from  = "method-taskB",
-      to    = "method-taskC",
-      name  = "03. taskC (test)",
-      index = 3
-  )
+  @ServiceNode("vs.taskC")
   private void taskC(InventoryRejectedEvent evt) {
     sleep(100);
   }

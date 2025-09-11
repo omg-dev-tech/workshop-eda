@@ -21,7 +21,8 @@ public class FilterConfig implements Filter {
         // HttpServletResponse httpResponse = (HttpServletResponse) response;
         // httpResponse.setHeader("Timing-Allow-Origin", "*");
 
-        chain.doFilter(request, httpResponse);
+        // chain.doFilter(request, httpResponse);
+        chain.doFilter(request, response);
     }
     
     

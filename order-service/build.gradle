@@ -36,6 +36,9 @@ dependencies {
     aspect "org.aspectj:aspectjweaver:1.9.22.1"
     implementation "org.aspectj:aspectjrt:1.9.22.1"
 
+    // instana-java-sdk
+    implementation "com.instana:instana-java-sdk:1.2.0"
+
     runtimeOnly 'org.postgresql:postgresql'
 
     // Lombok

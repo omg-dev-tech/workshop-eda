@@ -126,6 +126,7 @@ public class OrderProcessService {
 
   @ServiceNode("vs.taskA")  
   private void taskA(InventoryReservedEvent evt) {
+    log.info("call taskA");
     sleep(100);
   }
 
@@ -141,6 +142,7 @@ public class OrderProcessService {
 
   @ServiceNode("vs.taskA")
   private void taskA(InventoryRejectedEvent evt) {
+    log.info("call taskA");
     sleep(100);
   }
 

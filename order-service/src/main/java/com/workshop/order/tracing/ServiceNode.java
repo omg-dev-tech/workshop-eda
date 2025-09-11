@@ -5,7 +5,10 @@ import java.lang.annotation.*;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ServiceNode {
-  String value();                 // 이 메서드의 가상 서비스명 (예: "vs.taskB")
-  Mode mode() default Mode.CLIENT_SERVER; // 보통은 CLIENT→SERVER로 충분
+  /** 이 메서드를 서비스 레벨로 승격할 때 사용할 이름 (예: "vs.taskB") */
+  String value();
+
+  /** 필요 시 메시징 모델로 표현하고 싶을 때 선택 */
+  Mode mode() default Mode.CLIENT_SERVER;
   enum Mode { CLIENT_SERVER, PRODUCER_CONSUMER }
 }

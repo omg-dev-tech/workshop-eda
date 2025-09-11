@@ -293,5 +293,5 @@ deploy:
       curl --location -k --request POST "${INSTANA_BASE_URL}/api/releases" \
         --header "Authorization: apiToken ${INSTANA_API_TOKEN}" \
         --header "Content-Type: application/json" \
-        --data "{ \"name\": \"$CI_COMMIT_SHORT_SHA\",\"start\": ${START_TS},\"applications\": [{ \"name\": \"TXC LG Hands-On\" }]}"
+        --data "{ \"name\": \"$CI_COMMIT_SHORT_SHA\",\"start\": ${START_TS},\"applications\": [{ \"name\": \"TXC Demo\" }]}"
     - kubectl -n "$K8S_NAMESPACE" rollout restart deploy payment-adapter-ext

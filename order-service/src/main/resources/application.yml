@@ -4,12 +4,12 @@ server:
 management:
   endpoints.web.exposure.include: health,info
   endpoints.enabled-by-default: false
-  endpoints.jmx.exposure.include=env,health,info,metrics
-  endpoint.info.enabled=true
-  endpoint.health.enabled=true
-  endpoint.metrics.enabled=true
-  endpoint.env.enabled=true
-  endpoint.env.show-values=ALWAYS
+  endpoints.jmx.exposure.include: env,health,info,metrics
+  endpoint.info.enabled: true
+  endpoint.health.enabled: true
+  endpoint.metrics.enabled: true
+  endpoint.env.enabled: true
+  endpoint.env.show-values: ALWAYS
 
 spring:
   datasource:

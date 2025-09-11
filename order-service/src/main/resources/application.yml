@@ -3,7 +3,14 @@ server:
 
 management:
   endpoints.web.exposure.include: health,info
-  
+  endpoints.enabled-by-default: false
+  endpoints.jmx.exposure.include=env,health,info,metrics
+  endpoint.info.enabled=true
+  endpoint.health.enabled=true
+  endpoint.metrics.enabled=true
+  endpoint.env.enabled=true
+  endpoint.env.show-values=ALWAYS
+
 spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:orders}
@@ -27,6 +34,8 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.add.type.headers: false   # 타입헤더 생략(호환성↑)
+  jmx:
+    enabled: true
 
 app:
   event:

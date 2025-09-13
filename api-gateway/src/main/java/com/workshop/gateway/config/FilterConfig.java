@@ -18,11 +18,10 @@ public class FilterConfig implements Filter {
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
         // TODO Auto-generated method stub
-        // HttpServletResponse httpResponse = (HttpServletResponse) response;
-        // httpResponse.setHeader("Timing-Allow-Origin", "*");
+        HttpServletResponse httpResponse = (HttpServletResponse) response;
+        httpResponse.setHeader("Timing-Allow-Origin", "*");
 
-        // chain.doFilter(request, httpResponse);
-        chain.doFilter(request, response);
+        chain.doFilter(request, httpResponse);
     }
     
     

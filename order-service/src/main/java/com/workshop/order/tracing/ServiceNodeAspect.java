@@ -1,5 +1,7 @@
 package com.workshop.order.tracing;
 
+import java.util.concurrent.Callable;
+
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -11,70 +13,50 @@ import com.instana.sdk.support.SpanSupport;
 @Aspect
 public class ServiceNodeAspect {
 
-  /** Throwable 을 던질 수 있는 함수형 인터페이스 */
-  @FunctionalInterface
-  interface SpanBody {
-    Object call() throws Throwable;
-  }
+    private static final String EXIT_SPAN = "svcnode-exit";
+    private static final String ENTRY_SPAN = "svcnode-entry";
 
-  // 방법 1) @annotation 바인딩 + execution 융합 (가장 안전)
-  @Around("execution(@com.workshop.order.tracing.ServiceNode * *(..)) && @annotation(node)")
-  public Object aroundServiceNode(ProceedingJoinPoint pjp, ServiceNode node) throws Throwable {
-    final String name = node.value();
-    // proceed() 는 Throwable 을 던지므로 커스텀 인터페이스로 전달
-    return exitThenEntry(name, node.mode(), () -> pjp.proceed());
-  }
-
-  /** EXIT → ENTRY 를 같은 이름으로 연달아 생성 */
-  private Object exitThenEntry(String name, ServiceNode.Mode mode, SpanBody body) throws Throwable {
-    return exitEnvelope(name, mode, () -> entryEnvelope(name, mode, body));
-  }
-
-  /** EXIT 스팬 래퍼: throws Throwable 로 맞춤 */
-  @Span(type = Type.EXIT, value = "sdk.exit")
-  private Object exitEnvelope(String name, ServiceNode.Mode mode, SpanBody next) throws Throwable {
-    // 동일 네이밍
-    SpanSupport.annotate(Type.EXIT, "sdk.exit", "service",   name);
-    SpanSupport.annotate(Type.EXIT, "sdk.exit", "endpoint",  name);
-    SpanSupport.annotate(Type.EXIT, "sdk.exit", "call.name", name);
-    SpanSupport.annotate(Type.EXIT, "sdk.exit", "span.kind",
-        mode == ServiceNode.Mode.PRODUCER_CONSUMER ? "producer" : "client");
-
-    // 원격 상관관계 (EXIT → ENTRY)
-    SpanSupport.inheritNext(
-        SpanSupport.currentTraceId(Type.EXIT),
-        SpanSupport.currentSpanId(Type.EXIT)
-    );
-
-    try {
-      return next.call();
-    } catch (Throwable t) {
-      SpanSupport.annotate(Type.EXIT, "sdk.exit", "error", "true");
-      if (t.getMessage() != null) {
-        SpanSupport.annotate(Type.EXIT, "sdk.exit", "message", t.getMessage());
-      }
-      throw t;
+    @Around("@annotation(node)")
+    public Object aroundServiceNode(ProceedingJoinPoint pjp, ServiceNode node) throws Throwable {
+        final String name = node.value();
+        return exitThenEntry(name, () -> {
+            try {
+                return pjp.proceed();
+            } catch (Throwable t) {
+                // ENTRY 스팬을 오류로 표시
+                SpanSupport.annotate(Span.Type.ENTRY, ENTRY_SPAN, "tags.error", "true");
+                // (선택) 에러 메시지/코드 등 추가 태깅
+                SpanSupport.annotate(Span.Type.ENTRY, ENTRY_SPAN, "tags.error.message", t.toString());
+                throw new Exception(t);
+            }
+        });
     }
-  }
 
-  /** ENTRY 스팬 래퍼: throws Throwable 로 맞춤 */
-  @Span(type = Type.ENTRY, value = "sdk.entry")
-  private Object entryEnvelope(String name, ServiceNode.Mode mode, SpanBody body) throws Throwable {
-    // 동일 네이밍
-    SpanSupport.annotate(Type.ENTRY, "sdk.entry", "service",   name);
-    SpanSupport.annotate(Type.ENTRY, "sdk.entry", "endpoint",  name);
-    SpanSupport.annotate(Type.ENTRY, "sdk.entry", "call.name", name);
-    SpanSupport.annotate(Type.ENTRY, "sdk.entry", "span.kind",
-        mode == ServiceNode.Mode.PRODUCER_CONSUMER ? "consumer" : "server");
-
-    try {
-      return body.call();
-    } catch (Throwable t) {
-      SpanSupport.annotate(Type.ENTRY, "sdk.entry", "error", "true");
-      if (t.getMessage() != null) {
-        SpanSupport.annotate(Type.ENTRY, "sdk.entry", "message", t.getMessage());
-      }
-      throw t;
+    /** EXIT 직후 ENTRY를 여는 래퍼 */
+    private Object exitThenEntry(String serviceName, Callable<?> body) throws Exception {
+        return openExit(serviceName, () -> openEntry(serviceName, body));
     }
-  }
+
+    /** EXIT 스팬 시작: 이전 단계에서 '이 서비스로 나간 호출'로 보이게 함 */
+    @Span(type = Span.Type.EXIT, value = EXIT_SPAN)
+    private Object openExit(String serviceName, Callable<?> next) throws Exception {
+        // UI 표시용 이름 오버라이드: 서비스/콜명을 현재 노드명으로 지정
+        SpanSupport.annotate(Span.Type.EXIT, EXIT_SPAN, "service", serviceName);
+        SpanSupport.annotate(Span.Type.EXIT, EXIT_SPAN, "call.name", serviceName);
+        // (선택) HTTP/RPC로 변환하고 싶다면 semantic tag를 추가
+        // SpanSupport.annotate(Span.Type.EXIT, EXIT_SPAN, "tags.rpc.method",
+        // "INTERNAL");
+
+        return next.call();
+    }
+
+    /** ENTRY 스팬 시작: 이 메소드 자체를 '수신'으로 보이게 함 */
+    @Span(type = Span.Type.ENTRY, value = ENTRY_SPAN)
+    private Object openEntry(String serviceName, Callable<?> body) throws Exception {
+        // UI 표시용: 서비스/엔드포인트명을 현재 노드명으로 지정
+        SpanSupport.annotate(Span.Type.ENTRY, ENTRY_SPAN, "service", serviceName);
+        SpanSupport.annotate(Span.Type.ENTRY, ENTRY_SPAN, "endpoint", serviceName);
+        SpanSupport.annotate(Span.Type.ENTRY, ENTRY_SPAN, "call.name", serviceName);
+        return body.call();
+    }
 }

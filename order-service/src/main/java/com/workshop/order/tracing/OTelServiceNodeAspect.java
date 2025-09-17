@@ -21,15 +21,19 @@ import io.opentelemetry.context.propagation.TextMapSetter;
 @Aspect
 public class OTelServiceNodeAspect {
 
-  private final Tracer tracer;
+  private final VirtualOtelFactory vFactory;
+  private final Tracer appTracer;                 // 현재 앱의 서비스 Tracer (Global)
   private final TextMapPropagator propagator;
 
-  // ★ AspectJ가 호출할 기본 생성자
-  public OTelServiceNodeAspect() {
-    OpenTelemetry otel = io.opentelemetry.api.GlobalOpenTelemetry.get(); // 전역에서 가져오기
-    this.tracer = otel.getTracer("svcnode-tracer");
+  // Spring 주입용
+  public OTelServiceNodeAspect(VirtualOtelFactory vFactory) {
+    this.vFactory = vFactory;
+    OpenTelemetry otel = io.opentelemetry.api.GlobalOpenTelemetry.get();
+    this.appTracer = otel.getTracer("svcnode-tracer-app");
     this.propagator = otel.getPropagators().getTextMapPropagator();
   }
+
+  // AspectJ 기본 생성자가 필요한 환경이라면, 정적 홀더/빈 조회 등으로 vFactory를 채워주세요.
 
   private static final TextMapSetter<Map<String, String>> SETTER =
       (carrier, key, value) -> carrier.put(key, value);
@@ -40,43 +44,64 @@ public class OTelServiceNodeAspect {
 
   @Around("@annotation(node)")
   public Object around(ProceedingJoinPoint pjp, ServiceNode node) throws Throwable {
-    final String nodeName = node.value();          // 예: "taskB"
+    final String nodeName = node.value();           // 가상 서비스명 (예: "vs.taskB")
     final String method   = pjp.getSignature().getName();
+    final ServiceNode.Mode mode = node.mode();
 
     Context parent = Context.current();
 
-    // 1) CLIENT 스팬: "이전 단계가 다음 노드로 호출했다"를 모델링
-    Span client = tracer.spanBuilder(nodeName)
-        .setSpanKind(SpanKind.CLIENT)
+    // 1) 송신측 CLIENT/PRODUCER 스팬 (현재 앱의 service.name)
+    SpanKind clientKind = (mode == ServiceNode.Mode.PRODUCER_CONSUMER)
+        ? SpanKind.PRODUCER : SpanKind.CLIENT;
+
+    var clientBuilder = appTracer.spanBuilder(nodeName)
+        .setSpanKind(clientKind)
         .setParent(parent)
         .setAttribute("rpc.system", "internal")
         .setAttribute("rpc.method", method)
-        // Instana 서비스 맵핑용: 원격 서비스 이름
-        .setAttribute("peer.service", nodeName)
-        .startSpan();
+        .setAttribute("peer.service", nodeName);     // 의존성 맵 연결 힌트
+
+    // 메시징 모델일 경우 표준 속성 추가
+    if (mode == ServiceNode.Mode.PRODUCER_CONSUMER) {
+      clientBuilder
+        .setAttribute("messaging.system", "internal")
+        .setAttribute("messaging.destination.name", nodeName)
+        .setAttribute("messaging.operation", "publish");
+    }
+
+    Span client = clientBuilder.startSpan();
 
     Map<String,String> carrier = new HashMap<>();
     try (Scope ignored = client.makeCurrent()) {
-      // 컨텍스트를 carrier에 주입
       propagator.inject(Context.current(), carrier, SETTER);
     } finally {
-      client.end(); // CLIENT는 즉시 종료(경계의 '보내는 쪽')
+      client.end(); // 경계의 보낸쪽
     }
 
-    // 2) SERVER 스팬: "해당 노드가 수신/시작점"으로 보이게
+    // 2) 수신측 SERVER/CONSUMER 스팬 (nodeName을 service.name으로 가지는 Tracer)
+    Tracer nodeTracer = vFactory.tracer(nodeName);
+
+    SpanKind serverKind = (mode == ServiceNode.Mode.PRODUCER_CONSUMER)
+        ? SpanKind.CONSUMER : SpanKind.SERVER;
+
     Context extracted = propagator.extract(parent, carrier, GETTER);
-    Span server = tracer.spanBuilder(nodeName)
-        .setSpanKind(SpanKind.SERVER)
+    var serverBuilder = nodeTracer.spanBuilder(nodeName)
+        .setSpanKind(serverKind)
         .setParent(extracted)
         .setAttribute("rpc.system", "internal")
-        .setAttribute("rpc.method", method)
-        // Instana per-call 서비스명(수신측 서비스 이름)
-        .setAttribute("service", nodeName)
-        .startSpan();
+        .setAttribute("rpc.method", method);
+
+    if (mode == ServiceNode.Mode.PRODUCER_CONSUMER) {
+      serverBuilder
+        .setAttribute("messaging.system", "internal")
+        .setAttribute("messaging.destination.name", nodeName)
+        .setAttribute("messaging.operation", "process");
+    }
+
+    Span server = serverBuilder.startSpan();
 
     try (Scope ignored = server.makeCurrent()) {
-      Object ret = pjp.proceed();          // ★ 실제 메소드 실행
-      return ret;
+      return pjp.proceed();
     } catch (Throwable t) {
       server.recordException(t);
       server.setStatus(StatusCode.ERROR, t.toString());

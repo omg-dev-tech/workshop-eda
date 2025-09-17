@@ -16,8 +16,8 @@ public class VirtualOtelFactory {
   private final ConcurrentHashMap<String, Tracer> cache = new ConcurrentHashMap<>();
   private final SpanExporter exporter;
 
-  public VirtualOtelFactory(String endpoint) {
-    this.exporter = OtlpGrpcSpanExporter.builder().setEndpoint(endpoint).build();
+  public VirtualOtelFactory(SpanExporter exporter) {
+    this.exporter = exporter;
   }
 
   public Tracer tracer(String serviceName) {

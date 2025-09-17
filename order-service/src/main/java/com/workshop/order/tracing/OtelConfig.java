@@ -7,6 +7,7 @@ import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 
 @Configuration
@@ -24,7 +25,7 @@ public class OtelConfig {
   }
 
   @Bean
-  public OTelServiceNodeAspect oTelServiceNodeAspect(VirtualOtelFactory factory) {
-    return new OTelServiceNodeAspect(factory);
+  public ApplicationRunner initAspectBridge(VirtualOtelFactory factory) {
+    return args -> OTelServiceNodeAspect.setFactory(factory);
   }
 }

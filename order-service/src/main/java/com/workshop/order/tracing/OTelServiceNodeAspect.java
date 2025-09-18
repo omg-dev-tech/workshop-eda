@@ -1,126 +1,104 @@
 package com.workshop.order.tracing;
 
-import java.util.HashMap;
-import java.util.Map;
-
+import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanKind;
-import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.api.trace.*;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
-import io.opentelemetry.context.propagation.TextMapGetter;
-import io.opentelemetry.context.propagation.TextMapPropagator;
-import io.opentelemetry.context.propagation.TextMapSetter;
 
+@Slf4j
 @Aspect
 public class OTelServiceNodeAspect {
 
-  // ── 정적 브리지 ─────────────────────────────────────────────
   private static volatile VirtualOtelFactory vFactory;
   public static void setFactory(VirtualOtelFactory f) { vFactory = f; }
 
   private static volatile Tracer appTracer;
-  private static volatile TextMapPropagator propagator;
 
   private static Tracer app() {
     if (appTracer == null) {
       synchronized (OTelServiceNodeAspect.class) {
         if (appTracer == null) {
-          var otel = GlobalOpenTelemetry.get();
-          appTracer = otel.getTracer("svcnode-tracer-app");
-          propagator = otel.getPropagators().getTextMapPropagator();
+          appTracer = GlobalOpenTelemetry.get().getTracer("svcnode-tracer-app");
         }
       }
     }
     return appTracer;
   }
-  private static TextMapPropagator prop() {
-    if (propagator == null) app();
-    return propagator;
-  }
-  // 생성자 정의 금지(기본 생성자 유지). Bean으로 등록하지 않음(CTW 전제).
 
-  private static final TextMapSetter<Map<String,String>> SETTER =
-      (carrier, k, v) -> carrier.put(k, v);
-  private static final TextMapGetter<Map<String,String>> GETTER = new TextMapGetter<>() {
-    @Override public Iterable<String> keys(Map<String,String> c) { return c.keySet(); }
-    @Override public String get(Map<String,String> c, String k) { return c.get(k); }
-  };
-
-  @Around("@annotation(node)")
+  @Around("execution(@com.workshop.order.tracing.ServiceNode * *(..)) && @annotation(node)")
   public Object around(ProceedingJoinPoint pjp, ServiceNode node) throws Throwable {
-    final String nodeName = node.value(); // vs.taskA / vs.taskB / vs.taskC
+    final String nodeName = node.value();
     final String method   = pjp.getSignature().getName();
     final var mode        = node.mode();
-    final Context parent  = Context.current();
 
-    // 1) CLIENT/PRODUCER: 앱 Tracer (현재 앱의 service.name로 귀속)
-    final SpanKind clientKind = (mode == ServiceNode.Mode.PRODUCER_CONSUMER)
+    // ★ 현재 체인의 부모(없으면 Context.current())
+    Context parent = ServiceChainContext.getOrCurrent();
+    Span parentSpan = Span.fromContext(parent);
+
+    // 1) CLIENT (앱 Tracer) — 부모는 직전 SERVER
+    SpanKind clientKind = (mode == ServiceNode.Mode.PRODUCER_CONSUMER)
         ? SpanKind.PRODUCER : SpanKind.CLIENT;
 
-    var clientBuilder = app().spanBuilder("call " + nodeName)
+    Span client = app().spanBuilder("call " + nodeName)
         .setSpanKind(clientKind)
         .setParent(parent)
-        // 표준 힌트 (Instana 엣지 계산 보조)
-        .setAttribute("rpc.system",  "internal")
-        .setAttribute("rpc.service", nodeName)   // 원격 서비스 식별
-        .setAttribute("rpc.method",  method)
-        .setAttribute("server.address", nodeName)
-        .setAttribute("peer.service", nodeName);
+        .setAttribute("rpc.system", "internal")
+        .setAttribute("rpc.service", nodeName)
+        .setAttribute("rpc.method", method)
+        .setAttribute("peer.service", nodeName)
+        .startSpan();
 
-    if (mode == ServiceNode.Mode.PRODUCER_CONSUMER) {
-      clientBuilder
-          .setAttribute("messaging.system", "internal")
-          .setAttribute("messaging.destination.name", nodeName)
-          .setAttribute("messaging.operation", "publish");
-    }
+    log.info("[CLIENT] {} traceId={} spanId={} parentSpanId={}",
+        nodeName,
+        client.getSpanContext().getTraceId(),
+        client.getSpanContext().getSpanId(),
+        parentSpan.getSpanContext().isValid()
+            ? parentSpan.getSpanContext().getSpanId()
+            : "0000000000000000"
+    );
 
-    Span client = clientBuilder.startSpan();
-
-    Map<String,String> carrier = new HashMap<>();
-    try (Scope ignored = client.makeCurrent()) {
-      prop().inject(Context.current(), carrier, SETTER);
-    } finally {
-      client.end();
-    }
-
-    // 2) SERVER/CONSUMER: 가상 서비스 Tracer (service.name = nodeName)
-    final SpanKind serverKind = (mode == ServiceNode.Mode.PRODUCER_CONSUMER)
+    // 2) SERVER (가상 서비스 Tracer) — 부모는 "지금(=CLIENT가 current인) 컨텍스트"
+    Tracer nodeTracer = (vFactory != null) ? vFactory.tracer(nodeName) : app();
+    SpanKind serverKind = (mode == ServiceNode.Mode.PRODUCER_CONSUMER)
         ? SpanKind.CONSUMER : SpanKind.SERVER;
 
-    var extracted  = prop().extract(parent, carrier, GETTER);
-    var nodeTracer = (vFactory != null) ? vFactory.tracer(nodeName) : app(); // 안전 Fallback
+    Span server;
+    Context serverCtx;
+    try (Scope cScope = client.makeCurrent()) {
+      server = nodeTracer.spanBuilder(nodeName)
+          .setSpanKind(serverKind)
+          .setParent(Context.current())   // ← CLIENT 아래에 SERVER를 직접 연결
+          .setAttribute("rpc.system", "internal")
+          .setAttribute("rpc.service", nodeName)
+          .setAttribute("rpc.method", method)
+          .startSpan();
 
-    var serverBuilder = nodeTracer.spanBuilder(nodeName)
-        .setSpanKind(serverKind)
-        .setParent(extracted)
-        .setAttribute("rpc.system",  "internal")
-        .setAttribute("rpc.service", nodeName)
-        .setAttribute("rpc.method",  method);
+      log.info("[SERVER] {} traceId={} spanId={} parentSpanId={}",
+          nodeName,
+          server.getSpanContext().getTraceId(),
+          server.getSpanContext().getSpanId(),
+          client.getSpanContext().getSpanId()
+      );
 
-    if (mode == ServiceNode.Mode.PRODUCER_CONSUMER) {
-      serverBuilder
-          .setAttribute("messaging.system", "internal")
-          .setAttribute("messaging.destination.name", nodeName)
-          .setAttribute("messaging.operation", "process");
-    }
+      try (Scope sScope = server.makeCurrent()) {
+        // ★ 다음 hop은 이 SERVER 밑으로 붙는다
+        serverCtx = Context.current();
+        ServiceChainContext.set(serverCtx);
 
-    Span server = serverBuilder.startSpan();
-
-    try (Scope ignored = server.makeCurrent()) {
-      return pjp.proceed();
-    } catch (Throwable t) {
-      server.recordException(t);
-      server.setStatus(StatusCode.ERROR, t.toString());
-      throw t;
+        return pjp.proceed();
+      } finally {
+        server.end();
+      }
     } finally {
-      server.end();
+      client.end();
+      // SERVER가 끝났으니, 체인 부모는 더 이상 유효 컨텍스트가 아님.
+      // 다음 hop에서 다시 set 할 것이므로 깔끔히 지워둠 (부모 잔류 방지)
+      // ServiceChainContext.clear();
     }
   }
 }

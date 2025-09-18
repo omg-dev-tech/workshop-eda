@@ -17,7 +17,7 @@ public class OtelConfig {
       @Value("${OTEL_EXPORTER_OTLP_ENDPOINT}") String endpoint,
       @Value("${INSTANA_API_KEY:}") Optional<String> apiKey
   ) {
-    var builder = OtlpGrpcSpanExporter.builder().setEndpoint(endpoint);
+    var builder = OtlpGrpcSpanExporter.builder().setEndpoint(endpoint.length() == 0 ? "http://127.0.0.1:9999" : endpoint);
     apiKey.filter(k -> !k.isBlank()).ifPresent(k -> builder.addHeader("x-instana-key", k));
     return new VirtualOtelFactory(builder.build());
   }

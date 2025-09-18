@@ -39,6 +39,10 @@ public class ServiceChainRootAspect {
 
       if (headers != null) {
         Map<String,String> map = KafkaHeaderUtils.toMap(headers);
+        log.info("[KafkaRoot] headers raw: {}", headers);
+        for (var h : headers) {
+            log.info("[KafkaRoot] header {}={}", h.key(), new String(h.value()));
+        }
 
         // 2) 표준 propagator로 먼저 extract (traceparent/b3 등)
         var propagator = GlobalOpenTelemetry.get().getPropagators().getTextMapPropagator();

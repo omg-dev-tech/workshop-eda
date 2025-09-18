@@ -47,7 +47,7 @@ public class ServiceChainRootAspect {
 
         if (extractedSpan.getSpanContext().isValid()) {
           ServiceChainContext.set(extracted);
-          log.debug("[KafkaRoot] extracted via propagator: traceId={} spanId={}",
+          log.info("[KafkaRoot] extracted via propagator: traceId={} spanId={}",
               extractedSpan.getSpanContext().getTraceId(),
               extractedSpan.getSpanContext().getSpanId());
         } else {
@@ -63,19 +63,19 @@ public class ServiceChainRootAspect {
                     traceId, spanId, TraceFlags.getDefault(), TraceState.getDefault());
                 Context ctx = Context.root().with(Span.wrap(sc));
                 ServiceChainContext.set(ctx);
-                log.debug("[KafkaRoot] constructed from Instana headers: traceId={} spanId={}", traceId, spanId);
+                log.info("[KafkaRoot] constructed from Instana headers: traceId={} spanId={}", traceId, spanId);
               } else {
-                log.debug("[KafkaRoot] Instana headers present but not hex; skip");
+                log.info("[KafkaRoot] Instana headers present but not hex; skip");
               }
             } catch (Throwable e) {
               log.warn("[KafkaRoot] failed to build SpanContext from Instana headers", e);
             }
           } else {
-            log.debug("[KafkaRoot] no trace headers found; chain starts empty");
+            log.info("[KafkaRoot] no trace headers found; chain starts empty");
           }
         }
       } else {
-        log.debug("[KafkaRoot] no Headers argument found; chain starts empty");
+        log.info("[KafkaRoot] no Headers argument found; chain starts empty");
       }
 
       // 4) 비즈니스 수행 (OTelServiceNodeAspect가 ServiceChainContext를 부모로 사용)

@@ -41,7 +41,7 @@ public class OrderProcessService {
       properties = {"spring.json.value.default.type=com.workshop.order.events.InventoryReservedEvent"}
   )
   @Transactional
-  public void onInventoryReserved(InventoryReservedEvent evt, @Header(KafkaHeaders.NATIVE_HEADERS) Headers headers) {
+  public void onInventoryReserved(InventoryReservedEvent evt) {
     log.info("🟩 onInventoryReserved orderId={}", evt.orderId());
     taskA(evt);  // 01
     taskB(evt);  // 02

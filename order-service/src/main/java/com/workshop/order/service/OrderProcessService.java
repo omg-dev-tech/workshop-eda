@@ -9,9 +9,13 @@ import com.workshop.order.payment.PaymentRequest;
 import com.workshop.order.payment.PaymentResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.apache.kafka.common.header.Headers;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +41,7 @@ public class OrderProcessService {
       properties = {"spring.json.value.default.type=com.workshop.order.events.InventoryReservedEvent"}
   )
   @Transactional
-  public void onInventoryReserved(InventoryReservedEvent evt) {
+  public void onInventoryReserved(InventoryReservedEvent evt, @Header(KafkaHeaders.NATIVE_HEADERS) Headers headers) {
     log.info("🟩 onInventoryReserved orderId={}", evt.orderId());
     taskA(evt);  // 01
     taskB(evt);  // 02

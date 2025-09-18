@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
 
 import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
 
@@ -27,4 +29,13 @@ public class OtelConfig {
   public ApplicationRunner initAspectBridge(VirtualOtelFactory factory) {
     return args -> OTelServiceNodeAspect.setFactory(factory);
   }
+
+  @Bean
+    public ConcurrentKafkaListenerContainerFactory<String,String> kafkaListenerContainerFactory(
+        ConsumerFactory<String,String> cf) {
+    var f = new ConcurrentKafkaListenerContainerFactory<String,String>();
+    f.setConsumerFactory(cf);
+    f.setRecordInterceptor(new KafkaTracePropExtractInterceptor<>());
+    return f;
+    }
 }

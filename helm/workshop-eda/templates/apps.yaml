@@ -24,7 +24,7 @@ spec:
           image: "{{ $global.imageRegistry }}/{{ $name }}:{{ $global.imageTag }}"
           imagePullPolicy: Always
           ports:
-            - containerPort: 8080
+            - containerPort: {{ default 8080 $cfg.containerPort }}
               name: http
 
           {{- if or $cfg.envFromSecrets $cfg.envFromConfigMaps }}
@@ -47,11 +47,11 @@ spec:
             {{- end }}
           {{- end }}
           readinessProbe:
-            httpGet: { path: /actuator/health, port: 8080 }
+            httpGet: { path: /actuator/health, port: {{ default 8080 $cfg.containerPort }} }
             initialDelaySeconds: 100
             periodSeconds: 60
           livenessProbe:
-            httpGet: { path: /actuator/health, port: 8080 }
+            httpGet: { path: /actuator/health, port: {{ default 8080 $cfg.containerPort }} }
             initialDelaySeconds: 120
             periodSeconds: 60
           resources:
@@ -70,6 +70,6 @@ spec:
   ports:
     - name: http
       port: {{ if eq (default "ClusterIP" $cfg.service.type) "LoadBalancer" }}80{{ else }}{{ default 8080 $cfg.service.port }}{{ end }}
-      targetPort: 8080
+      targetPort: {{ default 8080 $cfg.containerPort }}
 
 {{- end }}

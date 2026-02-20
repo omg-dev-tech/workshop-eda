@@ -38,11 +38,13 @@ spec:
             {{- end }}
           {{- end }}
 
+          {{- if $cfg.env }}
           env:
-            {{- range $k, $v := $cfg.env }}
-            - name: {{ $k }}
-              value: "{{ $v }}"
+            {{- range $key, $value := $cfg.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
             {{- end }}
+          {{- end }}
           readinessProbe:
             httpGet: { path: /actuator/health, port: {{ default 8080 $cfg.service.port }} }
             initialDelaySeconds: 100

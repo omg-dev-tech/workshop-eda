@@ -1,7 +1,80 @@
-global:
-  imageRegistry: ""
-  imageTag: "latest"
-  imagePullSecret: ""
-  kafkaBootstrap: "localhost:9092"
+# OpenShift(OCP) 배포를 위한 Helm Values
+# GHCR(GitHub Container Registry) 이미지 사용
 
-apps: {}  # values-ci.yaml에서 채움
+global:
+  # GHCR 이미지 레지스트리 설정
+  imageRegistry: "ghcr.io/omg-dev-tech/workshop-eda"
+  imageTag: "latest"
+  
+  # imagePullSecret 설정 (필요시 주석 해제)
+  # GHCR이 public이면 불필요, private이면 아래 설정 필요
+  # imagePullSecret: "ghcr-secret"
+  imagePullSecret: ""
+  
+  # Kafka 부트스트랩 서버 (OCP 환경에 맞게 수정)
+  kafkaBootstrap: "my-cluster-kafka-bootstrap:9092"
+
+# 각 마이크로서비스 애플리케이션 설정
+apps:
+  order-service:
+    service:
+      port: 8081
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://order-db:5432/orderdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: my-cluster-kafka-bootstrap:9092
+      EVENT_NS: orders.v1
+      PAYMENT_SERVICE_URL: http://payment-adapter-ext:9090
+
+  inventory-service:
+    service:
+      port: 8082
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://inventory-db:5432/inventorydb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: my-cluster-kafka-bootstrap:9092
+      EVENT_NS: orders.v1
+
+  fulfillment-service:
+    service:
+      port: 8083
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://fulfillment-db:5432/fulfillmentdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: my-cluster-kafka-bootstrap:9092
+      EVENT_NS: orders.v1
+
+  analytics-service:
+    service:
+      port: 8084
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://analytics-db:5432/analyticsdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: my-cluster-kafka-bootstrap:9092
+      EVENT_NS: orders.v1
+
+  payment-adapter-ext:
+    service:
+      port: 9090
+    env:
+      PAYMENT_SUCCESS_RATE: "0.9"
+      PAYMENT_DELAY_MS: "500"
+
+  api-gateway:
+    service:
+      port: 8080
+    env:
+      ORDER_SERVICE_URL: http://order-service:8081
+      CORS_ALLOWED_ORIGINS: "*"
+
+# OCP 배포 참고사항:
+# 1. Kafka, PostgreSQL 등 인프라 서비스는 별도로 배포 필요
+# 2. Route를 통한 외부 노출이 필요한 경우 별도 설정 필요
+# 3. ConfigMap/Secret으로 민감 정보 관리 권장
+# 4. 리소스 제한은 templates/apps.yaml에 정의됨
+
+# Made with Bob

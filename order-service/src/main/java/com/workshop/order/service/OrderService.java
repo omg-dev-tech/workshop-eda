@@ -29,7 +29,7 @@ public class OrderService {
   public OrderEntity create(CreateOrderReq req) {
     // 1) 주문 저장
     var entity = new OrderEntity();
-    entity.setId("o-" + UUID.randomUUID());
+    // ID는 @GeneratedValue로 자동 생성됨
     entity.setCustomerId(req.customerId());
     entity.setAmount(req.amount());
     entity.setCurrency(req.currency());
@@ -41,7 +41,7 @@ public class OrderService {
     var evt = new OrderCreatedEvent(
         UUID.randomUUID().toString(),
         ns + ".created",
-        saved.getId(),
+        saved.getId().toString(),  // UUID를 String으로 변환
         saved.getCustomerId(),
         saved.getAmount(),
         saved.getCurrency(),
@@ -50,7 +50,7 @@ public class OrderService {
         now
     );
     var topic = ns + ".created";
-    kafka.send(topic, saved.getId(), evt);
+    kafka.send(topic, saved.getId().toString(), evt);  // UUID를 String으로 변환
 
     return saved;
   }

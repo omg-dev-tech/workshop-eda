@@ -10,6 +10,8 @@ volumes:
   kafka-data: {}
   order-db-data: {}
   inventory-db-data: {}
+  analytics-db-data: {}
+  notification-db-data: {}
   fulfillment-db-data: {}
 
 services:
@@ -17,31 +19,30 @@ services:
   # Messaging: Apache Kafka (KRaft, 단일 노드)
   # -----------------------------------------------------------
   kafka:
-    image: bitnami/kafka:3.7
+    image: confluentinc/cp-kafka:7.6.0
     container_name: kafka
     environment:
-      - KAFKA_ENABLE_KRAFT=yes
-      - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_PROCESS_ROLES=controller,broker
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      # 🔽 리스너 3개(내부/컨트롤러/외부)
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      # 🔽 컨테이너 내부용은 kafka:9092, 호스트용은 localhost:29092 로 광고
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
-      - KAFKA_CFG_NUM_PARTITIONS=3
-      - KAFKA_CFG_DEFAULT_REPLICATION_FACTOR=1
-      - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-      - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=1
-      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=false
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+      - KAFKA_NUM_PARTITIONS=3
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=false
+      - CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
     ports:
       - "9092:9092"    # 내부용(컨테이너들이 접속) - 필요시만 외부 노출
       - "29092:29092"  # 외부용(호스트에서 접속)
     volumes:
-      - kafka-data:/bitnami/kafka
+      - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -51,7 +52,7 @@ services:
 
   # 토픽 초기화(1회성, kafka healthy 이후 실행)
   topic-init:
-    image: bitnami/kafka:3.7
+    image: confluentinc/cp-kafka:7.6.0
     depends_on:
       kafka:
         condition: service_healthy
@@ -59,17 +60,17 @@ services:
     command: >
       "
       set -e;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.created --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.inventory_reserved --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.inventory_rejected --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.payment_authorized --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.payment_failed --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.fulfillment_scheduled --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.completed --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.canceled --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.orders --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.inventory --partitions 3 --replication-factor 1;
-      kafka-topics.sh --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.fulfillment --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.created --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.inventory_reserved --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.inventory_rejected --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.payment_authorized --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.payment_failed --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.fulfillment_scheduled --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.completed --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic ${EVENT_NS}.canceled --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.orders --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.inventory --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server ${KAFKA_BROKER:-kafka:9092} --create --if-not-exists --topic dlq.fulfillment --partitions 3 --replication-factor 1;
       echo 'topics ready';
       "
     networks:
@@ -134,6 +135,25 @@ services:
       retries: 20
     networks:
       - eda-net
+  analytics-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${ANALYTICS_DB_NAME:-analytics}
+      POSTGRES_USER: ${ANALYTICS_DB_USER:-analytics}
+      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASS:-analyticspw}
+    ports:
+      - "5436:5432"
+    volumes:
+      - analytics-db-data:/var/lib/postgresql/data
+      - ./infra/sql/analytics-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U ${ANALYTICS_DB_USER:-analytics} -d ${ANALYTICS_DB_NAME:-analytics}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - eda-net
+
 
   # -----------------------------------------------------------
   # Applications
@@ -149,6 +169,9 @@ services:
     environment:
       ORDER_SERVICE_URL: http://order-service:8080
       SERVER_PORT: 8080
+      # CORS Configuration
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # Observability
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_RESOURCE_ATTRIBUTES: env=${OTEL_RESOURCE_ENV:-workshop}
@@ -259,6 +282,40 @@ services:
       - "${FUL_SVC_PORT:-8083}:8080"
     networks:
       - eda-net
+  # Analytics Service
+  analytics-service:
+    build:
+      context: ./analytics-service
+    image: ${CI_REGISTRY_IMAGE:-workshop}/analytics-service:local
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8084
+      # DB
+      DB_HOST: ${ANALYTICS_DB_HOST:-analytics-db}
+      DB_PORT: ${ANALYTICS_DB_PORT:-5432}
+      DB_NAME: ${ANALYTICS_DB_NAME:-analytics}
+      DB_USER: ${ANALYTICS_DB_USER:-analytics}
+      DB_PASSWORD: ${ANALYTICS_DB_PASS:-analyticspw}
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BROKER:-kafka:9092}
+      EVENT_NS: ${EVENT_NS:-orders.v1}
+      # Observability
+      OTEL_SERVICE_NAME: analytics-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_RESOURCE_ATTRIBUTES: env=${OTEL_RESOURCE_ENV:-workshop}
+      OTEL_INSTRUMENTATION_MESSAGING_PROPAGATORS: tracecontext,b3
+    ports:
+      - "${ANALYTICS_SVC_PORT:-8084}:8084"
+    networks:
+      - eda-net
+
 
   # 외부 연동 API 시뮬레이터(결제)
   payment-adapter-ext:
@@ -272,3 +329,20 @@ services:
       - "${PAY_ADAPTER_PORT:-9090}:9090"
     networks:
       - eda-net
+
+  # -----------------------------------------------------------
+  # Web UI (Instana Synthetic Monitoring Demo)
+  # -----------------------------------------------------------
+  web-ui:
+    build:
+      context: ./web
+    image: ${CI_REGISTRY_IMAGE:-workshop}/web-ui:local
+    ports:
+      - "${WEB_UI_PORT:-3000}:80"
+    networks:
+      - eda-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

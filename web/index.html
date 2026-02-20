@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Order Service Tester</title>
+  <!-- Tailwind via CDN for quick styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Config (overridden by config.js when present) -->
+  <script>
+    window.__CONFIG__ = {
+      BASE_URL: "/api" // default; overridden by /config.js in k8s
+    };
+  </script>
+  <!-- Optional: your EUM script could be injected here -->
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <div class="max-w-5xl mx-auto p-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">Order Service Tester</h1>
+      <p class="text-sm text-slate-500">간단한 주문 API 테스트 및 JS 오류 유도 화면</p>
+    </header>
+
+    <!-- Base URL Panel -->
+    <section class="mb-6 p-4 bg-white rounded-2xl shadow">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label class="flex-1">
+          <span class="block text-sm font-medium">API Base URL</span>
+          <input id="baseUrl" class="mt-1 w-full rounded-xl border p-2" placeholder="https://your-order-api.example.com" />
+        </label>
+        <button id="applyBaseUrl" class="rounded-xl px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700">적용</button>
+        <button id="pingBtn" class="rounded-xl px-4 py-2 border">/health 체크</button>
+      </div>
+      <p class="mt-2 text-xs text-slate-500">기본값은 <code>window.__CONFIG__.BASE_URL</code> 입니다. GKE에선 ConfigMap으로 주입되는 <code>/config.js</code>가 이를 덮어씁니다.</p>
+    </section>
+
+    <div class="grid gap-6 md:grid-cols-2">
+      <!-- Order Lookup -->
+      <section class="p-4 bg-white rounded-2xl shadow">
+        <h2 class="text-lg font-semibold mb-3">주문 조회 (GET /orders/{id})</h2>
+        <div class="flex gap-2">
+          <input id="orderId" class="flex-1 rounded-xl border p-2" placeholder="주문 ID 입력" />
+          <button id="lookupBtn" class="rounded-xl px-4 py-2 bg-blue-600 text-white hover:bg-blue-700">조회</button>
+        </div>
+      </section>
+
+      <!-- Send Order -->
+      <section class="p-4 bg-white rounded-2xl shadow">
+        <h2 class="text-lg font-semibold mb-3">주문 생성 (POST /orders)</h2>
+        <textarea id="orderBody" class="w-full h-40 rounded-xl border p-2 font-mono text-sm">{
+  "customerId": "customer-{{timestamp}}",
+  "amount": 50000,
+  "currency": "KRW",
+  "items": [
+    { "sku": "product-001", "qty": 2 }
+  ]
+}</textarea>
+        <div class="mt-2 flex gap-2">
+          <button id="sendBtn" class="rounded-xl px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700">전송</button>
+          <button id="formatBtn" class="rounded-xl px-4 py-2 border">JSON 정렬</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- JS Error Triggers -->
+    <section class="mt-6 p-4 bg-white rounded-2xl shadow">
+      <h2 class="text-lg font-semibold mb-3">JS 에러 발생</h2>
+      <div class="flex flex-wrap gap-2">
+        <button id="throwBtn" class="rounded-xl px-4 py-2 bg-rose-600 text-white hover:bg-rose-700">Unhandled Error throw()</button>
+        <button id="promiseBtn" class="rounded-xl px-4 py-2 bg-amber-500 text-white hover:bg-amber-600">Unhandled Promise Rejection</button>
+        <button id="handledBtn" class="rounded-xl px-4 py-2 border">Handled Error (try/catch)</button>
+      </div>
+      <p class="mt-2 text-xs text-slate-500">Instana EUM 등 JS 에러 수집 도구 테스트용</p>
+    </section>
+
+    <!-- Output Panel -->
+    <section class="mt-6 p-4 bg-white rounded-2xl shadow">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-lg font-semibold">응답 / 로그</h2>
+        <div class="flex gap-2">
+          <button id="clearBtn" class="rounded-xl px-3 py-1 border text-sm">Clear</button>
+          <label class="text-sm text-slate-500 flex items-center gap-1"><input id="tsToggle" type="checkbox" class="mr-1" checked>타임스탬프 표시</label>
+        </div>
+      </div>
+      <pre id="output" class="bg-slate-900 text-slate-100 rounded-xl p-3 text-xs overflow-auto max-h-72"></pre>
+    </section>
+  </div>
+
+  <script>
+    // --- Utilities ---
+    const $ = (sel) => document.querySelector(sel);
+    const out = $('#output');
+    const ts = () => new Date().toISOString();
+    const log = (level, obj) => {
+      const showTs = $('#tsToggle').checked;
+      const prefix = showTs ? `[${ts()}] ${level}` : level;
+      out.textContent += `${prefix} » ${typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2)}\n`;
+      out.scrollTop = out.scrollHeight;
+    };
+
+    // --- Config ---
+    let BASE_URL = (window.__CONFIG__ && window.__CONFIG__.BASE_URL) || '/api';
+    const baseUrlInput = $('#baseUrl');
+    baseUrlInput.value = BASE_URL;
+
+    $('#applyBaseUrl').addEventListener('click', () => {
+      BASE_URL = baseUrlInput.value.trim() || BASE_URL;
+      log('info', `BASE_URL set to ${BASE_URL}`);
+    });
+
+    $('#pingBtn').addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/actuator/health`);
+        const text = await res.text();
+        log('ok', { status: res.status, body: text });
+      } catch (e) {
+        log('error', e.message || e);
+      }
+    });
+
+    // --- Lookup ---
+    $('#lookupBtn').addEventListener('click', async () => {
+      const id = $('#orderId').value.trim();
+      if (!id) return log('warn', 'orderId 필요');
+      try {
+        const res = await fetch(`${BASE_URL}/api/orders/${encodeURIComponent(id)}`);
+        const body = await res.json().catch(() => ({ raw: 'non-json', text: res.statusText }));
+        log(res.ok ? 'ok' : 'fail', { status: res.status, body });
+      } catch (e) {
+        log('error', e.message || e);
+      }
+    });
+
+    // --- Send Order ---
+    const templateReplace = (s) => s.replaceAll('{{timestamp}}', Date.now());
+    $('#formatBtn').addEventListener('click', () => {
+      try {
+        const raw = templateReplace($('#orderBody').value);
+        const obj = JSON.parse(raw);
+        $('#orderBody').value = JSON.stringify(obj, null, 2);
+      } catch (e) {
+        log('warn', '유효한 JSON이 아닙니다. {{timestamp}} 는 숫자로 치환됩니다.');
+      }
+    });
+
+    $('#sendBtn').addEventListener('click', async () => {
+      try {
+        const raw = templateReplace($('#orderBody').value);
+        const obj = JSON.parse(raw);
+        const res = await fetch(`${BASE_URL}/api/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(obj)
+        });
+        const body = await res.json().catch(() => ({ raw: 'non-json' }));
+        log(res.ok ? 'ok' : 'fail', { status: res.status, body });
+      } catch (e) {
+        log('error', e.message || e);
+      }
+    });
+
+    // --- Error Buttons ---
+    $('#throwBtn').addEventListener('click', () => {
+      throw new Error('Intentional unhandled error from UI');
+    });
+    $('#promiseBtn').addEventListener('click', () => {
+      Promise.reject(new Error('Intentional unhandled promise rejection'));
+    });
+    $('#handledBtn').addEventListener('click', () => {
+      try {
+        JSON.parse('{ invalid json');
+      } catch (e) {
+        log('handled', e.message);
+      }
+    });
+
+    // Global error listeners (helps visibility)
+    window.addEventListener('error', (e) => log('window.error', e.message));
+    window.addEventListener('unhandledrejection', (e) => log('window.unhandledrejection', e.reason?.message || String(e.reason)));
+  </script>
+  <!-- Runtime config override, if present -->
+  <script src="/config.js"></script>
+</body>
+</html>

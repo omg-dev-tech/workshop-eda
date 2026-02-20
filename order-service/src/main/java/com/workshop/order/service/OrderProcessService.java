@@ -46,13 +46,14 @@ public class OrderProcessService {
     taskA(evt);  // 01
     taskB(evt);  // 02
     taskC(evt);  // 03
-    orders.findById(evt.orderId()).ifPresent(o -> {
+    UUID orderId = UUID.fromString(evt.orderId());
+    orders.findById(orderId).ifPresent(o -> {
       o.setStatus(OrderStatus.INVENTORY_RESERVED);
       orders.save(o);
     });
 
     // 결제 요청 본문 구성 (order 엔티티에서 금액/통화 가져와도 됨)
-    var order = orders.findById(evt.orderId()).orElse(null);
+    var order = orders.findById(orderId).orElse(null);
     long amount = order != null ? order.getAmount() : 0L;
     String currency = order != null ? order.getCurrency() : "KRW";
 
@@ -103,7 +104,8 @@ public class OrderProcessService {
     taskA(evt);  // 01
     taskB(evt);  // 02
     taskC(evt);  // 03
-    orders.findById(evt.orderId()).ifPresent(o -> {
+    UUID orderId = UUID.fromString(evt.orderId());
+    orders.findById(orderId).ifPresent(o -> {
       o.setStatus(OrderStatus.INVENTORY_REJECTED);
       orders.save(o);
     });
@@ -118,7 +120,8 @@ public class OrderProcessService {
   @Transactional
   public void onFulfillmentScheduled(FulfillmentScheduledEvent evt) {
     log.info("📦 onFulfillmentScheduled orderId={} shippingId={}", evt.orderId(), evt.shippingId());
-    orders.findById(evt.orderId()).ifPresent(o -> {
+    UUID orderId = UUID.fromString(evt.orderId());
+    orders.findById(orderId).ifPresent(o -> {
       o.setStatus(OrderStatus.COMPLETED);
       orders.save(o);
     });

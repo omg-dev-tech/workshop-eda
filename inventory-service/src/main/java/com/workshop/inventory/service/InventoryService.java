@@ -45,7 +45,12 @@ public class InventoryService {
       if (evt.items() != null) {
         for (var it : evt.items()) {
           log.info("Save inventory");
-          var inv = inventoryRepo.findById(it.sku()).orElse(new InventoryEntity(it.sku(), 0));
+          var inv = inventoryRepo.findById(it.sku()).orElseGet(() -> {
+            var newInv = new InventoryEntity();
+            newInv.setSku(it.sku());
+            newInv.setQty(0);
+            return newInv;
+          });
           inv.setQty(inv.getQty() - it.qty());
           inventoryRepo.save(inv);
 

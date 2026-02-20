@@ -19,7 +19,7 @@ public class OrderController {
   @PostMapping
   public CreateOrderRes create(@RequestBody CreateOrderReq req) {
     OrderEntity saved = service.create(req);
-    return new CreateOrderRes(saved.getId(), saved.getStatus().name());
+    return new CreateOrderRes(saved.getId().toString(), saved.getStatus().name());
   }
 
   @GetMapping("/healthz")

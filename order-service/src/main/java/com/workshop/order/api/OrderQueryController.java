@@ -3,6 +3,7 @@ package com.workshop.order.api;
 import com.workshop.order.domain.OrderEntity;
 import com.workshop.order.domain.OrderRepository;
 import org.springframework.web.bind.annotation.*;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/orders")
@@ -12,6 +13,7 @@ public class OrderQueryController {
 
   @GetMapping("/{id}")
   public OrderEntity get(@PathVariable String id) {
-    return repo.findById(id).orElseThrow(() -> new IllegalArgumentException("order not found"));
+    UUID uuid = UUID.fromString(id);
+    return repo.findById(uuid).orElseThrow(() -> new IllegalArgumentException("order not found"));
   }
 }

@@ -9,5 +9,7 @@ import lombok.*;
 public class InventoryEntity {
   @Id
   private String sku;
+  
+  private String productName;
   private Integer qty;
 }

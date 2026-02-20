@@ -1,33 +1,35 @@
--- fulfillment 초기 스키마 (PostgreSQL)
--- 컨테이너가 "처음" 올라올 때 /docker-entrypoint-initdb.d 에서 자동 실행됨
+-- =================================================================
+-- Fulfillment Service Database Schema
+-- =================================================================
 
--- 타임스탬프 자동 갱신 트리거
-CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- 출고(fulfillment) 테이블
+-- 배송 테이블 (fulfillments로 간소화)
 CREATE TABLE IF NOT EXISTS fulfillments (
-  id            BIGSERIAL PRIMARY KEY,
-  order_id      varchar(64) NOT NULL UNIQUE,     -- 주문 ID 1:1
-  status        varchar(32) NOT NULL DEFAULT 'PENDING',  -- PENDING|SCHEDULED|FAILED
-  event_time_ms bigint NOT NULL,                 -- 예약 이벤트 시각(ms)
-  shipping_id   varchar(64),                     -- 스케줄 후 부여
-  created_at    timestamptz NOT NULL DEFAULT NOW(),
-  updated_at    timestamptz NOT NULL DEFAULT NOW()
+    id BIGSERIAL PRIMARY KEY,
+    order_id VARCHAR(64) NOT NULL UNIQUE,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    event_time_ms BIGINT NOT NULL,
+    shipping_id VARCHAR(64),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TRIGGER trg_fulfillments_updated_at
-BEFORE UPDATE ON fulfillments
-FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE INDEX IF NOT EXISTS idx_fulfillment_order ON fulfillments(order_id);
+CREATE INDEX IF NOT EXISTS idx_fulfillment_status ON fulfillments(status);
 
-CREATE INDEX IF NOT EXISTS idx_fulfillments_status ON fulfillments(status);
+-- Outbox Events 테이블 (선택사항)
+CREATE TABLE IF NOT EXISTS outbox_events (
+    id BIGSERIAL PRIMARY KEY,
+    aggregate_id VARCHAR(255) NOT NULL,
+    aggregate_type VARCHAR(100) NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    event_data JSONB NOT NULL,
+    event_version INTEGER DEFAULT 1,
+    correlation_id VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'PENDING',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP WITH TIME ZONE,
+    error_message TEXT
+);
 
--- ※ 초깃값은 필요 없음. inventory_reserved 이벤트가 들어오면 앱이 insert/update 합니다.
--- -- 예시(테스트 용) — 필요 시 주석 해제
--- INSERT INTO fulfillments(order_id, status, event_time_ms, shipping_id)
--- VALUES ('o-sample-ful-001', 'SCHEDULED', EXTRACT(EPOCH FROM NOW())*1000, 'shp-sample-001')
--- ON CONFLICT(order_id) DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_events(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON outbox_events(aggregate_type, aggregate_id);

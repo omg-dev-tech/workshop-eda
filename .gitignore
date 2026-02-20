@@ -35,3 +35,20 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Environment & Secrets ###
+.env
+.env.local
+*.env
+
+### Logs ###
+*.log
+logs/
+
+### Docker ###
+*.tar
+
+### Custom ###
+.bob/
+
+.DS_Store

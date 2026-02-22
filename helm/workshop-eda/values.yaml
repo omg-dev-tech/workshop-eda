@@ -26,7 +26,7 @@ apps:
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_KAFKA_BOOTSTRAP_SERVERS: my-cluster-kafka-bootstrap:9092
       EVENT_NS: orders.v1
-      PAYMENT_SERVICE_URL: http://payment-adapter-ext:9090
+      PAYMENT_BASE_URL: http://payment-adapter-ext:9090
       # OpenTelemetry 설정
       OTEL_EXPORTER_OTLP_ENDPOINT: ""
       INSTANA_API_KEY: ""

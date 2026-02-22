@@ -88,7 +88,10 @@ apps:
     service:
       port: 80
     env:
-      API_GATEWAY_URL: http://api-gateway:8080
+      # API_GATEWAY_URL은 config.js에서 동적으로 생성됨
+      # 로컬: localhost:8080
+      # OCP: 브라우저 URL 기반 (web-xxx → api-gateway-xxx)
+      API_GATEWAY_URL: http://api-gateway:8080  # 참고용 (실제로는 사용 안 함)
     # OCP Route 설정 (외부 접근용)
     route:
       enabled: true

@@ -14,8 +14,8 @@ COPY --chown=nginx:nginx app.js /usr/share/nginx/html/
 COPY --chown=nginx:nginx style.css /usr/share/nginx/html/
 COPY --chown=nginx:nginx config.js /usr/share/nginx/html/
 
-# Nginx 설정 복사
-COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
+# Nginx 메인 설정 파일 복사 (PID 경로가 /tmp로 설정됨)
+COPY --chown=nginx:nginx nginx.conf /etc/nginx/nginx.conf
 
 USER nginx
 

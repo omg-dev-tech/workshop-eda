@@ -453,8 +453,12 @@ async function loadAnalytics() {
         const eventsData = await eventsResponse.json();
         document.getElementById('totalEvents').textContent = eventsData.count.toLocaleString();
 
-        // 오늘 주문 통계
-        const today = new Date().toISOString().split('T')[0];
+        // 오늘 주문 통계 (로컬 시간 기준)
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const today = `${year}-${month}-${day}`;
         const summaryResponse = await fetch(`${API_BASE_URL}/api/admin/analytics/summary?date=${today}`);
         const summaryData = await summaryResponse.json();
         document.getElementById('todayOrders').textContent = summaryData.totalOrders.toLocaleString();

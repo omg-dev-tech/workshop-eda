@@ -160,19 +160,34 @@ function displayOrders(orders, containerId) {
         return;
     }
 
-    const html = orders.map(order => `
-        <div class="order-item">
-            <div class="order-header">
-                <span class="order-id">주문 #${order.id.substring(0, 8)}</span>
-                <span class="status status-${order.status.toLowerCase()}">${getStatusText(order.status)}</span>
+    const html = orders.map(order => {
+        // 날짜 포맷팅 처리
+        let createdAtText = '날짜 정보 없음';
+        if (order.createdAt) {
+            try {
+                const date = new Date(order.createdAt);
+                if (!isNaN(date.getTime())) {
+                    createdAtText = date.toLocaleString('ko-KR');
+                }
+            } catch (e) {
+                console.error('Date parsing error:', e);
+            }
+        }
+        
+        return `
+            <div class="order-item">
+                <div class="order-header">
+                    <span class="order-id">주문 #${order.id.substring(0, 8)}</span>
+                    <span class="status status-${order.status.toLowerCase()}">${getStatusText(order.status)}</span>
+                </div>
+                <div class="order-details">
+                    <p>고객: ${order.customerId}</p>
+                    <p>금액: ${order.amount.toLocaleString()} ${order.currency}</p>
+                    <p>생성일: ${createdAtText}</p>
+                </div>
             </div>
-            <div class="order-details">
-                <p>고객: ${order.customerId}</p>
-                <p>금액: ${order.amount.toLocaleString()} ${order.currency}</p>
-                <p>생성일: ${new Date(order.createdAt).toLocaleString('ko-KR')}</p>
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 
     container.innerHTML = html;
 }

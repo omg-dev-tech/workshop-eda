@@ -47,7 +47,6 @@ spec:
               value: {{ $value | quote }}
             {{- end }}
           {{- end }}
-          {{- end }}
           readinessProbe:
             httpGet: { path: /actuator/health, port: {{ default 8080 $cfg.containerPort }} }
             initialDelaySeconds: 100

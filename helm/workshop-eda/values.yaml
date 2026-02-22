@@ -98,6 +98,21 @@ apps:
       enabled: true
       host: ""  # OCP에서 자동 생성되는 호스트 사용
 
+  load-generator:
+    enabled: true
+    # Job 또는 CronJob으로 실행 (기본: Job)
+    type: "job"  # job 또는 cronjob
+    # CronJob 스케줄 (type이 cronjob일 때만 사용)
+    schedule: "*/10 * * * *"  # 10분마다 실행
+    env:
+      API_GATEWAY_URL: http://api-gateway:8080
+      TPS: "10"  # Transactions Per Second
+      DURATION: "300"  # 5분 (초 단위)
+      WORKERS: "10"
+      REPLENISH_INTERVAL: "30"  # 재고 보충 주기 (초)
+      SHIP_INTERVAL: "20"  # 배송 처리 주기 (초)
+      REPLENISH_QTY: "100"  # 재고 보충 수량
+
 # OCP 배포 참고사항:
 # 1. Kafka, PostgreSQL 등 인프라 서비스는 별도로 배포 필요
 # 2. Route를 통한 외부 노출이 필요한 경우 별도 설정 필요

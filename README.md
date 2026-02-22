@@ -29,6 +29,7 @@ docker pull ghcr.io/omg-dev-tech/workshop-eda/fulfillment-service:latest
 docker pull ghcr.io/omg-dev-tech/workshop-eda/payment-adapter-ext:latest
 docker pull ghcr.io/omg-dev-tech/workshop-eda/analytics-service:latest
 docker pull ghcr.io/omg-dev-tech/workshop-eda/api-gateway:latest
+docker pull ghcr.io/omg-dev-tech/workshop-eda/load-generator:latest
 
 # 특정 커밋 버전 Pull (예시)
 docker pull ghcr.io/omg-dev-tech/workshop-eda/order-service:abc1234
@@ -37,7 +38,7 @@ docker pull ghcr.io/omg-dev-tech/workshop-eda/order-service:abc1234
 ### 이미지 빌드 자동화
 
 main 브랜치에 푸시하면 GitHub Actions가 자동으로:
-- 6개 마이크로서비스 이미지를 빌드
+- 8개 마이크로서비스 이미지를 빌드 (6개 서비스 + Web UI + Load Generator)
 - GHCR에 `latest` 태그와 커밋 SHA 태그로 푸시
 - 빌드 캐시를 활용하여 빌드 시간 최적화
 
@@ -46,6 +47,73 @@ main 브랜치에 푸시하면 GitHub Actions가 자동으로:
 ## Stop
 
 ## Uninstall
+
+## Load Generator
+
+자동 부하 발생기를 사용하여 시스템에 부하를 생성할 수 있습니다.
+
+### 주요 기능
+- **주문 생성**: 설정 가능한 TPS로 랜덤 주문 생성
+- **재고 보충**: 주기적으로 재고 확인 및 자동 보충
+- **배송 처리**: SCHEDULED 상태의 배송을 자동으로 SHIPPED로 변경
+- **통계 수집**: 성공/실패 통계 실시간 출력
+
+### 환경변수 설정
+
+```bash
+API_GATEWAY_URL=http://api-gateway:8080  # API Gateway URL
+TPS=10                                    # Transactions Per Second
+DURATION=300                              # 실행 시간 (초)
+WORKERS=10                                # 동시 실행 워커 수
+REPLENISH_INTERVAL=30                     # 재고 보충 주기 (초)
+SHIP_INTERVAL=20                          # 배송 처리 주기 (초)
+REPLENISH_QTY=100                         # 재고 보충 수량
+```
+
+### 로컬 실행
+
+```bash
+# Docker로 실행
+docker run --rm \
+  -e API_GATEWAY_URL=http://localhost:8080 \
+  -e TPS=10 \
+  -e DURATION=60 \
+  ghcr.io/omg-dev-tech/workshop-eda/load-generator:latest
+
+# Python으로 직접 실행
+cd load-generator
+pip install -r requirements.txt
+python load_generator.py
+```
+
+### OCP/Kubernetes 배포
+
+Helm Chart를 통해 Job 또는 CronJob으로 배포할 수 있습니다:
+
+```yaml
+# values.yaml
+apps:
+  load-generator:
+    enabled: true
+    type: "job"  # 또는 "cronjob"
+    schedule: "*/10 * * * *"  # CronJob인 경우
+    env:
+      TPS: "20"
+      DURATION: "300"
+```
+
+```bash
+# Job으로 1회 실행
+helm upgrade --install workshop-eda ./helm/workshop-eda \
+  --set apps.load-generator.enabled=true \
+  --set apps.load-generator.type=job
+
+# CronJob으로 주기적 실행
+helm upgrade --install workshop-eda ./helm/workshop-eda \
+  --set apps.load-generator.enabled=true \
+  --set apps.load-generator.type=cronjob \
+  --set apps.load-generator.schedule="*/10 * * * *"
+```
 
 ## Local Testing
 

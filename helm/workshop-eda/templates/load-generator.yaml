@@ -1,0 +1,85 @@
+{{- if .Values.apps }}
+{{- $loadGen := index .Values.apps "load-generator" }}
+{{- if $loadGen.enabled }}
+---
+{{- if eq $loadGen.type "cronjob" }}
+# CronJob으로 주기적 실행
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: load-generator
+  labels:
+    app: load-generator
+spec:
+  schedule: {{ $loadGen.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: load-generator
+        spec:
+          restartPolicy: OnFailure
+          {{- if .Values.global.imagePullSecret }}
+          imagePullSecrets:
+            - name: {{ .Values.global.imagePullSecret }}
+          {{- end }}
+          containers:
+            - name: load-generator
+              image: "{{ .Values.global.imageRegistry }}/load-generator:{{ .Values.global.imageTag }}"
+              imagePullPolicy: Always
+              env:
+                {{- range $key, $value := $loadGen.env }}
+                - name: {{ $key }}
+                  value: {{ $value | quote }}
+                {{- end }}
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "500m"
+{{- else }}
+# Job으로 1회 실행
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-generator
+  labels:
+    app: load-generator
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: load-generator
+    spec:
+      restartPolicy: OnFailure
+      {{- if .Values.global.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecret }}
+      {{- end }}
+      containers:
+        - name: load-generator
+          image: "{{ .Values.global.imageRegistry }}/load-generator:{{ .Values.global.imageTag }}"
+          imagePullPolicy: Always
+          env:
+            {{- range $key, $value := $loadGen.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+{{- end }}
+{{- end }}
+{{- end }}
+
+# Made with Bob

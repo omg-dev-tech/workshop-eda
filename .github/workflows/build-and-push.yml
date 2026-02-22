@@ -41,6 +41,9 @@ jobs:
           - name: web
             context: ./web
             dockerfile: ./web/Dockerfile
+          - name: load-generator
+            context: ./load-generator
+            dockerfile: ./load-generator/Dockerfile
     
     steps:
       - name: Checkout code

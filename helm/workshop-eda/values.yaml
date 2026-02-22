@@ -84,7 +84,7 @@ apps:
       CORS_ALLOWED_ORIGINS: "*"
 
   web:
-    containerPort: 80
+    containerPort: 8080
     service:
       port: 80
     env:

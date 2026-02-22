@@ -30,8 +30,10 @@ spec:
           imagePullPolicy: Always
           env:
             {{- range $key, $value := $loadGen.env }}
+            {{- if ne $key "DURATION" }}
             - name: {{ $key }}
               value: {{ $value | quote }}
+            {{- end }}
             {{- end }}
             - name: LOOP_MODE
               value: "true"

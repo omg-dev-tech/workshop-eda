@@ -43,6 +43,13 @@ public class OrderController {
     return repo.findById(uuid).orElseThrow(() -> new IllegalArgumentException("order not found"));
   }
 
+  // 주문 재처리 (INVENTORY_REJECTED 상태만 가능)
+  @PostMapping("/{id}/retry")
+  public OrderEntity retry(@PathVariable String id) {
+    UUID uuid = UUID.fromString(id);
+    return service.retry(uuid);
+  }
+
   @GetMapping("/healthz")
   public String health() { return "order-service ok"; }
 }

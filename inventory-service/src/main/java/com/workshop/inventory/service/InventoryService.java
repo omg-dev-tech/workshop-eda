@@ -28,6 +28,9 @@ public class InventoryService {
   @Value("${app.event.ns}")
   private String ns;
 
+  @Value("${app.payment.failed-topic:${app.event.ns}.payment_failed}")
+  private String paymentFailedTopic;
+
   private String reservedTopic() { return ns + ".inventory_reserved"; }
   private String rejectedTopic() { return ns + ".inventory_rejected"; }
 
@@ -99,5 +102,40 @@ public class InventoryService {
     return inventoryRepo.findById(item.sku())
         .map(inv -> inv.getQty() >= item.qty())
         .orElse(false);
+  }
+
+  /**
+   * 결제 실패 시 예약된 재고를 롤백합니다.
+   */
+  @KafkaListener(
+      topics = "${app.payment.failed-topic:${app.event.ns}.payment_failed}",
+      groupId = "${spring.kafka.consumer.group-id}",
+      properties = {"spring.json.value.default.type=com.workshop.inventory.events.PaymentFailedEvent"}
+  )
+  @Transactional
+  public void onPaymentFailed(PaymentFailedEvent evt) {
+    log.info("🔄 onPaymentFailed orderId={} reason={}", evt.orderId(), evt.reason());
+    
+    // 예약된 재고 찾기
+    List<ReservationEntity> reservations = reservationRepo.findByOrderId(evt.orderId());
+    
+    if (reservations.isEmpty()) {
+      log.warn("⚠️ No reservations found for orderId={}", evt.orderId());
+      return;
+    }
+    
+    // 재고 롤백
+    for (ReservationEntity reservation : reservations) {
+      inventoryRepo.findById(reservation.getSku()).ifPresent(inv -> {
+        inv.setQty(inv.getQty() + reservation.getQty());
+        inventoryRepo.save(inv);
+        log.info("✅ Rolled back inventory: sku={} qty={}", reservation.getSku(), reservation.getQty());
+      });
+      
+      // 예약 삭제
+      reservationRepo.delete(reservation);
+    }
+    
+    log.info("✅ Inventory rollback completed for orderId={}", evt.orderId());
   }
 }

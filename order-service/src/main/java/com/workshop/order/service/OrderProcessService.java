@@ -107,7 +107,23 @@ public class OrderProcessService {
     });
   }
 
-  // 3) (선택) fulfillment_scheduled 수신 시 완료 처리
+  // 3) 결제 실패 시 상태 업데이트
+  @KafkaListener(
+      topics = "${app.payment.failed-topic}",
+      groupId = "${spring.kafka.consumer.group-id}",
+      properties = {"spring.json.value.default.type=com.workshop.order.events.PaymentFailedEvent"}
+  )
+  @Transactional
+  public void onPaymentFailed(PaymentFailedEvent evt) {
+    log.info("💳❌ onPaymentFailed orderId={} reason={}", evt.orderId(), evt.reason());
+    UUID orderId = UUID.fromString(evt.orderId());
+    orders.findById(orderId).ifPresent(o -> {
+      o.setStatus(OrderStatus.PAYMENT_FAILED);
+      orders.save(o);
+    });
+  }
+
+  // 4) (선택) fulfillment_scheduled 수신 시 완료 처리
   @KafkaListener(
       topics = "${app.fulfillment.scheduled-topic:${app.event.ns}.fulfillment_scheduled}",
       groupId = "${spring.kafka.consumer.group-id}",

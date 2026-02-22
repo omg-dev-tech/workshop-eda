@@ -2,6 +2,7 @@ package com.workshop.fulfillment.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "fulfillments", indexes = {
@@ -24,4 +25,21 @@ public class FulfillmentEntity {
 
   @Column(length = 64)
   private String shippingId;
+
+  @Column(nullable = false, updatable = false)
+  private OffsetDateTime createdAt;
+  
+  @Column(nullable = false)
+  private OffsetDateTime updatedAt;
+
+  @PrePersist
+  protected void onCreate() {
+    createdAt = OffsetDateTime.now();
+    updatedAt = OffsetDateTime.now();
+  }
+
+  @PreUpdate
+  protected void onUpdate() {
+    updatedAt = OffsetDateTime.now();
+  }
 }

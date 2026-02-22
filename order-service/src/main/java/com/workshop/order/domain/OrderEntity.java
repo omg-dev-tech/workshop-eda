@@ -26,9 +26,20 @@ public class OrderEntity {
     @Builder.Default
     private OrderStatus status = OrderStatus.PENDING;
 
-    @Builder.Default
-    private OffsetDateTime createdAt = OffsetDateTime.now();
+    @Column(nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
     
-    @Builder.Default
-    private OffsetDateTime updatedAt = OffsetDateTime.now();
+    @Column(nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = OffsetDateTime.now();
+        updatedAt = OffsetDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = OffsetDateTime.now();
+    }
 }

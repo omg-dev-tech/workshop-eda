@@ -236,6 +236,14 @@ body {
     background: #d32f2f;
 }
 
+.btn-warning {
+    background: #ff9800;
+}
+
+.btn-warning:hover {
+    background: #f57c00;
+}
+
 /* 주문 목록 */
 .orders-list {
     max-height: 600px;
@@ -272,6 +280,12 @@ body {
     color: #666;
 }
 
+.order-actions {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+
 /* 상태 배지 */
 .status {
     padding: 4px 12px;
@@ -291,6 +305,11 @@ body {
 }
 
 .status-inventory_rejected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.status-payment_failed {
     background: #f8d7da;
     color: #721c24;
 }

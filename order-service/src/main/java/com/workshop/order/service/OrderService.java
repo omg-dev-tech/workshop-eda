@@ -37,21 +37,49 @@ public class OrderService {
     var saved = repo.save(entity);
 
     // 2) 이벤트 발행 (orders.v1.created)
+    publishOrderCreatedEvent(saved, req);
+
+    return saved;
+  }
+
+  /**
+   * INVENTORY_REJECTED 상태의 주문을 재처리합니다.
+   * 재고가 추가된 후 관리자가 수동으로 호출할 수 있습니다.
+   */
+  public OrderEntity retry(UUID orderId) {
+    var order = repo.findById(orderId)
+        .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+    // INVENTORY_REJECTED 상태만 재처리 가능
+    if (order.getStatus() != OrderStatus.INVENTORY_REJECTED) {
+      throw new IllegalStateException("Only INVENTORY_REJECTED orders can be retried. Current status: " + order.getStatus());
+    }
+
+    // 상태를 PENDING으로 변경
+    order.setStatus(OrderStatus.PENDING);
+    var saved = repo.save(order);
+
+    // OrderCreated 이벤트 재발행
+    publishOrderCreatedEvent(saved, null);
+
+    return saved;
+  }
+
+  private void publishOrderCreatedEvent(OrderEntity order, CreateOrderReq req) {
     long now = System.currentTimeMillis();
     var evt = new OrderCreatedEvent(
         UUID.randomUUID().toString(),
         ns + ".created",
-        saved.getId().toString(),  // UUID를 String으로 변환
-        saved.getCustomerId(),
-        saved.getAmount(),
-        saved.getCurrency(),
-        req.items() == null ? java.util.List.of() :
-            req.items().stream().map(i -> new OrderCreatedEvent.Item(i.sku(), i.qty())).toList(),
+        order.getId().toString(),
+        order.getCustomerId(),
+        order.getAmount(),
+        order.getCurrency(),
+        req != null && req.items() != null ?
+            req.items().stream().map(i -> new OrderCreatedEvent.Item(i.sku(), i.qty())).toList() :
+            java.util.List.of(),
         now
     );
     var topic = ns + ".created";
-    kafka.send(topic, saved.getId().toString(), evt);  // UUID를 String으로 변환
-
-    return saved;
+    kafka.send(topic, order.getId().toString(), evt);
   }
 }

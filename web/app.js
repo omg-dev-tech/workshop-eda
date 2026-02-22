@@ -154,6 +154,7 @@ async function loadAllOrders() {
 // 주문 목록 표시
 function displayOrders(orders, containerId) {
     const container = document.getElementById(containerId);
+    const isAdmin = containerId === 'allOrders';
     
     if (orders.length === 0) {
         container.innerHTML = '<p class="empty">주문이 없습니다.</p>';
@@ -167,12 +168,24 @@ function displayOrders(orders, containerId) {
             try {
                 const date = new Date(order.createdAt);
                 if (!isNaN(date.getTime())) {
-                    createdAtText = date.toLocaleString('ko-KR');
+                    createdAtText = date.toLocaleString('ko-KR', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
                 }
             } catch (e) {
                 console.error('Date parsing error:', e);
             }
         }
+        
+        // 재처리 버튼 (관리자 화면 + INVENTORY_REJECTED 상태만)
+        const retryButton = isAdmin && order.status === 'INVENTORY_REJECTED'
+            ? `<button onclick="retryOrder('${order.id}')" class="btn-small btn-warning">🔄 재처리</button>`
+            : '';
         
         return `
             <div class="order-item">
@@ -184,6 +197,7 @@ function displayOrders(orders, containerId) {
                     <p>고객: ${order.customerId}</p>
                     <p>금액: ${order.amount.toLocaleString()} ${order.currency}</p>
                     <p>생성일: ${createdAtText}</p>
+                    ${retryButton ? `<div class="order-actions">${retryButton}</div>` : ''}
                 </div>
             </div>
         `;
@@ -198,10 +212,33 @@ function getStatusText(status) {
         'PENDING': '대기중',
         'INVENTORY_RESERVED': '재고확보',
         'INVENTORY_REJECTED': '재고부족',
+        'PAYMENT_FAILED': '결제실패',
         'COMPLETED': '완료',
         'FAILED': '실패'
     };
     return statusMap[status] || status;
+}
+
+// 주문 재처리
+async function retryOrder(orderId) {
+    if (!confirm('이 주문을 재처리하시겠습니까?\n재고가 충분한지 확인해주세요.')) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/retry`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            alert('주문이 재처리되었습니다!\n재고 확인 후 결제가 진행됩니다.');
+            loadAllOrders();
+        } else {
+            const error = await response.text();
+            alert(`재처리 실패: ${error}`);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('주문 재처리 중 오류가 발생했습니다.');
+    }
 }
 
 // 재고 추가

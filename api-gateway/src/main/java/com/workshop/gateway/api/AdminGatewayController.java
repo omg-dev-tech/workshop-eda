@@ -1,5 +1,6 @@
 package com.workshop.gateway.api;
 
+import com.workshop.gateway.model.FulfillmentView;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.ResponseEntity;
@@ -56,19 +57,19 @@ public class AdminGatewayController {
 
   // Fulfillment APIs
   @GetMapping("/fulfillments")
-  public ResponseEntity<?> getAllFulfillments() {
+  public ResponseEntity<List<FulfillmentView>> getAllFulfillments() {
     return ResponseEntity.ok(fulfillmentRestClient.get()
         .uri("/fulfillments")
         .retrieve()
-        .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {}));
+        .body(new ParameterizedTypeReference<List<FulfillmentView>>() {}));
   }
 
   @PutMapping("/fulfillments/{id}/ship")
-  public ResponseEntity<?> shipFulfillment(@PathVariable Long id) {
+  public ResponseEntity<FulfillmentView> shipFulfillment(@PathVariable Long id) {
     return ResponseEntity.ok(fulfillmentRestClient.put()
         .uri("/fulfillments/{id}/ship", id)
         .retrieve()
-        .body(Map.class));
+        .body(FulfillmentView.class));
   }
 
   // Analytics APIs

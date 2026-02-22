@@ -32,10 +32,20 @@ stats = {
 
 def create_order() -> bool:
     """주문 생성"""
+    quantity = random.randint(1, 3)
+    sku = random.choice(PRODUCTS)
+    amount = quantity * 1000  # 가격: 1000원 * 수량
+    
     payload = {
         'customerId': random.choice(CUSTOMERS),
-        'productId': random.choice(PRODUCTS),
-        'quantity': random.randint(1, 3)
+        'amount': amount,
+        'currency': 'KRW',
+        'items': [
+            {
+                'sku': sku,
+                'qty': quantity
+            }
+        ]
     }
     
     try:

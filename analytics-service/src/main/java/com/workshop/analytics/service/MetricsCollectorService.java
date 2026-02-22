@@ -12,10 +12,18 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
+/**
+ * 메트릭 수집 서비스
+ * 모든 시간대 처리는 한국 시간(Asia/Seoul)을 기준으로 합니다.
+ */
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MetricsCollectorService {
+
+    // 한국 시간대 (UTC+9)
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
     private final OrderMetricsRepository orderMetricsRepository;
     private final ProductMetricsRepository productMetricsRepository;
@@ -23,12 +31,16 @@ public class MetricsCollectorService {
     @Transactional
     public void recordOrderCreated(OrderCreatedEvent event) {
         try {
+            // 한국 시간대로 변환
             LocalDateTime dateTime = LocalDateTime.ofInstant(
-                Instant.ofEpochMilli(event.eventTime()), 
-                ZoneId.systemDefault()
+                Instant.ofEpochMilli(event.eventTime()),
+                KOREA_ZONE
             );
             LocalDate date = dateTime.toLocalDate();
             int hour = dateTime.getHour();
+            
+            log.debug("Recording order created: orderId={}, eventTime={}, KST date={}, hour={}",
+                event.orderId(), event.eventTime(), date, hour);
 
             // Order Metrics 업데이트
             OrderMetricsEntity metrics = orderMetricsRepository
@@ -71,7 +83,8 @@ public class MetricsCollectorService {
     @Transactional
     public void recordInventoryRejected(String orderId) {
         try {
-            LocalDateTime dateTime = LocalDateTime.now();
+            // 한국 시간대 기준 현재 시간
+            LocalDateTime dateTime = LocalDateTime.now(KOREA_ZONE);
             LocalDate date = dateTime.toLocalDate();
             int hour = dateTime.getHour();
 
@@ -109,7 +122,8 @@ public class MetricsCollectorService {
     @Transactional
     public void recordPaymentFailed(String orderId) {
         try {
-            LocalDateTime dateTime = LocalDateTime.now();
+            // 한국 시간대 기준 현재 시간
+            LocalDateTime dateTime = LocalDateTime.now(KOREA_ZONE);
             LocalDate date = dateTime.toLocalDate();
             int hour = dateTime.getHour();
 
@@ -138,12 +152,16 @@ public class MetricsCollectorService {
     @Transactional
     public void recordFulfillmentScheduled(FulfillmentScheduledEvent event) {
         try {
+            // 한국 시간대로 변환
             LocalDateTime dateTime = LocalDateTime.ofInstant(
-                Instant.ofEpochMilli(event.eventTimeMs()), 
-                ZoneId.systemDefault()
+                Instant.ofEpochMilli(event.eventTimeMs()),
+                KOREA_ZONE
             );
             LocalDate date = dateTime.toLocalDate();
             int hour = dateTime.getHour();
+            
+            log.debug("Recording fulfillment scheduled: orderId={}, eventTime={}, KST date={}, hour={}",
+                event.orderId(), event.eventTimeMs(), date, hour);
 
             OrderMetricsEntity metrics = orderMetricsRepository
                 .findByDateAndHour(date, hour)

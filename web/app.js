@@ -1,5 +1,5 @@
-// API Gateway URL (환경 변수 또는 기본값)
-const API_BASE_URL = window.API_GATEWAY_URL || 'http://localhost:8080';
+// API Gateway URL (config.js에서 동적으로 생성됨)
+const API_BASE_URL = window.__CONFIG__ ? window.__CONFIG__.BASE_URL : 'http://localhost:8080';
 
 // 현재 로그인한 사용자 정보
 let currentUser = null;

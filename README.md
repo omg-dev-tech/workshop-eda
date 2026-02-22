@@ -145,6 +145,38 @@ helm upgrade --install workshop-eda ./helm/workshop-eda \
 > **참고**: Kubernetes CronJob은 최소 1분 간격으로만 스케줄링 가능합니다.
 > 지속적인 부하 생성이 필요한 경우 **Deployment** 타입을 사용하세요.
 
+### 로그 확인 및 디버깅
+
+```bash
+# Pod 이름 확인
+kubectl get pods -l app=load-generator
+
+# 실시간 로그 확인
+kubectl logs -f deployment/load-generator
+
+# 최근 로그 확인 (마지막 100줄)
+kubectl logs deployment/load-generator --tail=100
+
+# 특정 Pod 로그 확인
+kubectl logs <pod-name>
+
+# 이전 실행 로그 확인 (재시작된 경우)
+kubectl logs deployment/load-generator --previous
+```
+
+**로그 출력 예시:**
+```
+=== Load Generator Started ===
+API Gateway URL: http://api-gateway:8080
+Target TPS: 10
+Duration: Infinite
+...
+[10s] Orders: 100 (Success: 95, Fail: 5), TPS: 10.00
+[Replenish] product-001: 45 -> 145
+[Ship] Fulfillment #123 shipped (Order: order-456)
+[Order Failed] Status: 500, Response: {"error":"Internal Server Error"}
+```
+
 ## Local Testing
 
 로컬 환경에서 전체 시스템을 테스트하는 방법은 [로컬 테스트 가이드](docs/LOCAL_TESTING_GUIDE.md)를 참조하세요.

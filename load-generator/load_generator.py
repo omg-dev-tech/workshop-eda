@@ -44,9 +44,16 @@ def create_order() -> bool:
             json=payload,
             timeout=5
         )
-        return response.status_code in [200, 201]
+        if response.status_code in [200, 201]:
+            return True
+        else:
+            print(f"[Order Failed] Status: {response.status_code}, Response: {response.text[:200]}")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"[Order Error] {type(e).__name__}: {e}")
+        return False
     except Exception as e:
-        print(f"[Order Error] {e}")
+        print(f"[Order Unexpected Error] {type(e).__name__}: {e}")
         return False
 
 def replenish_inventory() -> int:

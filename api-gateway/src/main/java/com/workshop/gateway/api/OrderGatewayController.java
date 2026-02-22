@@ -38,4 +38,10 @@ public class OrderGatewayController {
   public OrderView get(@PathVariable String id) {
     return orders.get(id);
   }
+
+  // 주문 재처리
+  @PostMapping("/orders/{id}/retry")
+  public void retryOrder(@PathVariable String id) {
+    orders.retryOrder(id);
+  }
 }

@@ -40,4 +40,11 @@ public class OrderClient {
         .retrieve()
         .body(OrderView.class);
   }
+
+  public void retryOrder(String orderId) {
+    orderRestClient.post()
+        .uri("/orders/{id}/retry", orderId)
+        .retrieve()
+        .toBodilessEntity();
+  }
 }

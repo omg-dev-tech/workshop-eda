@@ -43,16 +43,19 @@ public class OrderService {
   }
 
   /**
-   * INVENTORY_REJECTED 상태의 주문을 재처리합니다.
-   * 재고가 추가된 후 관리자가 수동으로 호출할 수 있습니다.
+   * 실패하거나 멈춘 주문을 재처리합니다.
+   * 재고가 추가되거나 시스템이 복구된 후 관리자가 수동으로 호출할 수 있습니다.
    */
   public OrderEntity retry(UUID orderId) {
     var order = repo.findById(orderId)
         .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
-    // INVENTORY_REJECTED 상태만 재처리 가능
-    if (order.getStatus() != OrderStatus.INVENTORY_REJECTED) {
-      throw new IllegalStateException("Only INVENTORY_REJECTED orders can be retried. Current status: " + order.getStatus());
+    // 재처리 가능한 상태 확인
+    if (order.getStatus() != OrderStatus.INVENTORY_REJECTED &&
+        order.getStatus() != OrderStatus.PAYMENT_FAILED &&
+        order.getStatus() != OrderStatus.INVENTORY_RESERVED &&
+        order.getStatus() != OrderStatus.PENDING) {
+      throw new IllegalStateException("Cannot retry order in status: " + order.getStatus());
     }
 
     // 상태를 PENDING으로 변경

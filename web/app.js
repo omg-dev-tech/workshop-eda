@@ -182,8 +182,9 @@ function displayOrders(orders, containerId) {
             }
         }
         
-        // 재처리 버튼 (관리자 화면 + INVENTORY_REJECTED 상태만)
-        const retryButton = isAdmin && order.status === 'INVENTORY_REJECTED'
+        // 재처리 버튼 (관리자 화면 + 재처리 가능한 상태)
+        const retryableStatuses = ['PENDING', 'INVENTORY_REJECTED', 'PAYMENT_FAILED', 'INVENTORY_RESERVED'];
+        const retryButton = isAdmin && retryableStatuses.includes(order.status)
             ? `<button onclick="retryOrder('${order.id}')" class="btn-small btn-warning">🔄 재처리</button>`
             : '';
         

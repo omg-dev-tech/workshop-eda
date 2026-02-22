@@ -54,10 +54,11 @@ apps:
       EVENT_NS: orders.v1
 
   analytics-service:
-    containerPort: 8084
+    containerPort: 8080
     service:
       port: 8084
     env:
+      SERVER_PORT: "8080"
       SPRING_DATASOURCE_URL: jdbc:postgresql://analytics-db:5432/analyticsdb
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres

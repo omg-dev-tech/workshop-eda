@@ -1,5 +1,6 @@
 {{- $global := .Values.global -}}
 {{- range $name, $cfg := .Values.apps }}
+{{- if ne $name "load-generator" }}
 
 ---
 apiVersion: apps/v1
@@ -45,6 +46,7 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+          {{- end }}
           {{- end }}
           readinessProbe:
             httpGet: { path: /actuator/health, port: {{ default 8080 $cfg.containerPort }} }

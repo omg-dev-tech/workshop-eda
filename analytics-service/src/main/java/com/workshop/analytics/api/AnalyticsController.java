@@ -75,13 +75,22 @@ public class AnalyticsController {
     public ResponseEntity<Map<String, Object>> getOrderSummary(
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
+        log.info("Fetching order summary for date: {}", date);
+        
+        // 해당 날짜의 모든 메트릭 조회 (디버깅용)
+        List<OrderMetricsEntity> metrics = orderMetricsRepository.findByDate(date);
+        log.info("Found {} order metrics entries for date {}", metrics.size(), date);
+        
         Long totalOrders = orderMetricsRepository.getTotalOrdersByDate(date);
         Long totalAmount = orderMetricsRepository.getTotalAmountByDate(date);
+        
+        log.info("Query results - totalOrders: {}, totalAmount: {}", totalOrders, totalAmount);
         
         Map<String, Object> response = new HashMap<>();
         response.put("date", date);
         response.put("totalOrders", totalOrders != null ? totalOrders : 0);
         response.put("totalAmount", totalAmount != null ? totalAmount : 0);
+        response.put("metricsCount", metrics.size());
         
         return ResponseEntity.ok(response);
     }

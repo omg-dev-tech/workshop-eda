@@ -22,10 +22,10 @@ public interface OrderMetricsRepository extends JpaRepository<OrderMetricsEntity
         @Param("endDate") LocalDate endDate
     );
 
-    @Query("SELECT SUM(o.totalOrders) FROM OrderMetricsEntity o WHERE o.date = :date")
+    @Query("SELECT COALESCE(SUM(CAST(o.totalOrders AS long)), 0L) FROM OrderMetricsEntity o WHERE o.date = :date")
     Long getTotalOrdersByDate(@Param("date") LocalDate date);
 
-    @Query("SELECT SUM(o.totalAmount) FROM OrderMetricsEntity o WHERE o.date = :date")
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0L) FROM OrderMetricsEntity o WHERE o.date = :date")
     Long getTotalAmountByDate(@Param("date") LocalDate date);
 }
 

@@ -100,8 +100,10 @@ apps:
 
   load-generator:
     enabled: true
-    # Job 또는 CronJob으로 실행 (기본: Job)
-    type: "job"  # job 또는 cronjob
+    # deployment, job, cronjob 중 선택 (기본: deployment)
+    type: "deployment"  # deployment, job, cronjob
+    # Deployment replicas (type이 deployment일 때만 사용)
+    replicas: 1
     # CronJob 스케줄 (type이 cronjob일 때만 사용)
     schedule: "*/10 * * * *"  # 10분마다 실행
     env:

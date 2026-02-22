@@ -9,11 +9,12 @@ from typing import Dict, List
 # 환경변수
 API_GATEWAY_URL = os.getenv('API_GATEWAY_URL', 'http://api-gateway:8080')
 TPS = int(os.getenv('TPS', '10'))  # Transactions Per Second
-DURATION = int(os.getenv('DURATION', '60'))  # seconds
+DURATION = int(os.getenv('DURATION', '60'))  # seconds (0 = 무한 실행)
 WORKERS = int(os.getenv('WORKERS', '10'))
 REPLENISH_INTERVAL = int(os.getenv('REPLENISH_INTERVAL', '30'))  # 재고 보충 주기 (초)
 SHIP_INTERVAL = int(os.getenv('SHIP_INTERVAL', '20'))  # 배송 처리 주기 (초)
 REPLENISH_QTY = int(os.getenv('REPLENISH_QTY', '100'))  # 재고 보충 수량
+LOOP_MODE = os.getenv('LOOP_MODE', 'false').lower() == 'true'  # 무한 루프 모드
 
 # 샘플 데이터
 PRODUCTS = ['product-001', 'product-002', 'product-003', 'LAPTOP-001']
@@ -134,7 +135,7 @@ def background_tasks(start_time: float, end_time: float):
     last_replenish = start_time
     last_ship = start_time
     
-    while time.time() < end_time:
+    while end_time == 0 or time.time() < end_time:
         current_time = time.time()
         
         # 재고 보충
@@ -163,7 +164,8 @@ def run_load_test():
     print("=== Load Generator Started ===")
     print(f"API Gateway URL: {API_GATEWAY_URL}")
     print(f"Target TPS: {TPS}")
-    print(f"Duration: {DURATION} seconds")
+    print(f"Duration: {'Infinite' if DURATION == 0 else f'{DURATION} seconds'}")
+    print(f"Loop Mode: {LOOP_MODE}")
     print(f"Workers: {WORKERS}")
     print(f"Replenish Interval: {REPLENISH_INTERVAL}s (Qty: {REPLENISH_QTY})")
     print(f"Ship Interval: {SHIP_INTERVAL}s")
@@ -171,7 +173,7 @@ def run_load_test():
     print("=" * 60)
     
     start_time = time.time()
-    end_time = start_time + DURATION
+    end_time = 0 if DURATION == 0 else start_time + DURATION
     
     # 백그라운드 작업 시작 (재고 보충 및 배송 처리)
     with ThreadPoolExecutor(max_workers=WORKERS + 1) as executor:
@@ -182,7 +184,7 @@ def run_load_test():
         total_requests = 0
         last_report_time = start_time
         
-        while time.time() < end_time:
+        while end_time == 0 or time.time() < end_time:
             batch_start = time.time()
             
             # TPS만큼 요청 생성
@@ -209,8 +211,9 @@ def run_load_test():
             if batch_elapsed < 1.0:
                 time.sleep(1.0 - batch_elapsed)
         
-        # 백그라운드 작업 완료 대기
-        bg_future.result()
+        # 백그라운드 작업 완료 대기 (무한 루프가 아닐 때만)
+        if end_time != 0:
+            bg_future.result()
     
     # 최종 통계 출력
     actual_duration = time.time() - start_time
@@ -237,7 +240,23 @@ def run_load_test():
     print(f"Failure: {stats['ship_failure']} attempts failed")
     print("=" * 60)
 
+def run_continuous():
+    """무한 루프 모드 - Deployment용"""
+    while True:
+        try:
+            run_load_test()
+        except KeyboardInterrupt:
+            print("\n[INFO] Shutting down gracefully...")
+            break
+        except Exception as e:
+            print(f"[ERROR] {e}")
+            print("[INFO] Restarting in 5 seconds...")
+            time.sleep(5)
+
 if __name__ == '__main__':
-    run_load_test()
+    if LOOP_MODE:
+        run_continuous()
+    else:
+        run_load_test()
 
 # Made with Bob

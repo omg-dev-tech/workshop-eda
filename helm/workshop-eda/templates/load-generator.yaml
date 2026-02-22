@@ -2,7 +2,49 @@
 {{- $loadGen := index .Values.apps "load-generator" }}
 {{- if $loadGen.enabled }}
 ---
-{{- if eq $loadGen.type "cronjob" }}
+{{- if eq $loadGen.type "deployment" }}
+# Deployment로 지속 실행
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-generator
+  labels:
+    app: load-generator
+spec:
+  replicas: {{ $loadGen.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+    spec:
+      {{- if .Values.global.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecret }}
+      {{- end }}
+      containers:
+        - name: load-generator
+          image: "{{ .Values.global.imageRegistry }}/load-generator:{{ .Values.global.imageTag }}"
+          imagePullPolicy: Always
+          env:
+            {{- range $key, $value := $loadGen.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            - name: LOOP_MODE
+              value: "true"
+            - name: DURATION
+              value: "0"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+{{- else if eq $loadGen.type "cronjob" }}
 # CronJob으로 주기적 실행
 apiVersion: batch/v1
 kind: CronJob

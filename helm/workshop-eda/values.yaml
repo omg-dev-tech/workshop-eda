@@ -78,12 +78,27 @@ apps:
       port: 8080
     env:
       ORDER_SERVICE_URL: http://order-service:8081
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      FULFILLMENT_SERVICE_URL: http://fulfillment-service:8083
+      ANALYTICS_SERVICE_URL: http://analytics-service:8084
       CORS_ALLOWED_ORIGINS: "*"
+
+  web:
+    containerPort: 80
+    service:
+      port: 80
+    env:
+      API_GATEWAY_URL: http://api-gateway:8080
+    # OCP Route 설정 (외부 접근용)
+    route:
+      enabled: true
+      host: ""  # OCP에서 자동 생성되는 호스트 사용
 
 # OCP 배포 참고사항:
 # 1. Kafka, PostgreSQL 등 인프라 서비스는 별도로 배포 필요
 # 2. Route를 통한 외부 노출이 필요한 경우 별도 설정 필요
 # 3. ConfigMap/Secret으로 민감 정보 관리 권장
 # 4. 리소스 제한은 templates/apps.yaml에 정의됨
+# 5. Web UI는 Route를 통해 외부에서 접근 가능
 
 # Made with Bob

@@ -4,9 +4,12 @@ import com.workshop.gateway.model.OrderCreateRequest;
 import com.workshop.gateway.model.OrderCreateResponse;
 import com.workshop.gateway.model.OrderView;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -22,6 +25,13 @@ public class OrderClient {
       builder = builder.header("X-Force-Payment", forcePaymentHeader);
     }
     return builder.retrieve().body(OrderCreateResponse.class);
+  }
+
+  public List<OrderView> getAll() {
+    return orderRestClient.get()
+        .uri("/orders")
+        .retrieve()
+        .body(new ParameterizedTypeReference<List<OrderView>>() {});
   }
 
   public OrderView get(String orderId) {

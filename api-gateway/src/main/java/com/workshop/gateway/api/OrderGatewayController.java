@@ -9,6 +9,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
@@ -23,6 +25,12 @@ public class OrderGatewayController {
       @RequestHeader(value = "X-Force-Payment", required = false) String forcePayment
   ) {
     return orders.create(req, forcePayment);
+  }
+
+  // 주문 목록 조회
+  @GetMapping("/orders")
+  public List<OrderView> getAll() {
+    return orders.getAll();
   }
 
   // 주문 조회(상태 확인)

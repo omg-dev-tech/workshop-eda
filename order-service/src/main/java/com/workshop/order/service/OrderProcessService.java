@@ -1,6 +1,5 @@
 package com.workshop.order.service;
 
-import com.workshop.order.tracing.ServiceNode;
 import com.workshop.order.domain.OrderRepository;
 import com.workshop.order.domain.OrderStatus;
 import com.workshop.order.events.*;
@@ -10,12 +9,9 @@ import com.workshop.order.payment.PaymentResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.kafka.common.header.Headers;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -131,34 +127,28 @@ public class OrderProcessService {
   // 테스트용 private 단계 메서드 3개 (각 100ms 지연, 내용 비움)
   // ────────────────────────────────────────────────────────────────
 
-  @ServiceNode("vs.taskA")  
   private void taskA(InventoryReservedEvent evt) {
     log.info("call taskA");
     sleep(100);
   }
 
-  @ServiceNode("vs.taskB")
   private void taskB(InventoryReservedEvent evt) {
     sleep(100);
   }
 
-  @ServiceNode("vs.taskC")
   private void taskC(InventoryReservedEvent evt) {
     sleep(100);
   }
 
-  @ServiceNode("vs.taskA")
   private void taskA(InventoryRejectedEvent evt) {
     log.info("call taskA");
     sleep(100);
   }
 
-  @ServiceNode("vs.taskB")
   private void taskB(InventoryRejectedEvent evt) {
     sleep(100);
   }
 
-  @ServiceNode("vs.taskC")
   private void taskC(InventoryRejectedEvent evt) {
     sleep(100);
   }

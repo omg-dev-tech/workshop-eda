@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Analytics Database Initialization Script
 
 -- Create database (run as postgres user)

@@ -1,6 +1,11 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- =================================================================
 -- Inventory Service Database Schema
 -- =================================================================
+
+-- Enable UUID extension for PostgreSQL 10
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 재고 테이블
 CREATE TABLE IF NOT EXISTS inventory (
@@ -36,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_reservations_expires_at ON reservations(expires_a
 
 -- 재고 이력 테이블
 CREATE TABLE IF NOT EXISTS inventory_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     product_id VARCHAR(255) NOT NULL,
     change_type VARCHAR(50) NOT NULL, -- RESTOCK, RESERVE, RELEASE, CONSUME
     quantity_change INTEGER NOT NULL,
@@ -53,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_inventory_history_created_at ON inventory_history
 
 -- Outbox Events 테이블
 CREATE TABLE IF NOT EXISTS outbox_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aggregate_id VARCHAR(255) NOT NULL,
     aggregate_type VARCHAR(100) NOT NULL,
     event_type VARCHAR(100) NOT NULL,

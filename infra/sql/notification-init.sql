@@ -1,10 +1,12 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- =================================================================
 -- Notification Service Database Schema
 -- =================================================================
 
 -- 알림 템플릿 테이블
 CREATE TABLE IF NOT EXISTS notification_templates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     template_name VARCHAR(100) NOT NULL UNIQUE,
     template_type VARCHAR(20) NOT NULL, -- EMAIL, SMS, PUSH
     subject VARCHAR(255),
@@ -19,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_templates_name_type ON notification_templates(tem
 
 -- 알림 발송 이력 테이블
 CREATE TABLE IF NOT EXISTS notification_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     recipient VARCHAR(255) NOT NULL,
     notification_type VARCHAR(20) NOT NULL, -- EMAIL, SMS, PUSH
     template_name VARCHAR(100) NOT NULL,
@@ -40,7 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_notification_history_created_at ON notification_h
 
 -- 고객 알림 설정 테이블
 CREATE TABLE IF NOT EXISTS customer_notification_preferences (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_id VARCHAR(255) NOT NULL UNIQUE,
     email_enabled BOOLEAN DEFAULT true,
     sms_enabled BOOLEAN DEFAULT false,

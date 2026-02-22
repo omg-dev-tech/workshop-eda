@@ -38,6 +38,9 @@ jobs:
           - name: api-gateway
             context: ./api-gateway
             dockerfile: ./api-gateway/Dockerfile
+          - name: web
+            context: ./web
+            dockerfile: ./web/Dockerfile
     
     steps:
       - name: Checkout code

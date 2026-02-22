@@ -40,68 +40,110 @@ public class InventoryService {
   )
   @Transactional
   public void onOrderCreated(OrderCreatedEvent evt) {
-    log.info("Receive Event {}", evt);
-    boolean allOk = evt.items() == null || evt.items().stream().allMatch(this::hasStock);
-    log.info("allOk: {}", allOk);
+    log.info("📦 Receive OrderCreated Event: orderId={}, items={}", evt.orderId(), evt.items());
+    
+    // 멱등성 체크: 이미 예약된 주문인지 확인
+    List<ReservationEntity> existingReservations = reservationRepo.findByOrderId(evt.orderId());
+    
+    if (!existingReservations.isEmpty()) {
+      log.info("🔄 Order already reserved: orderId={}, sending existing reservation event", evt.orderId());
+      // 이미 예약된 경우 기존 예약 정보로 이벤트 재발행
+      var out = new InventoryReservedEvent(
+          UUID.randomUUID().toString(),
+          reservedTopic(),
+          evt.orderId(),
+          existingReservations.stream()
+              .map(r -> new InventoryReservedEvent.Item(r.getSku(), r.getQty()))
+              .toList(),
+          System.currentTimeMillis()
+      );
+      kafka.send(reservedTopic(), evt.orderId(), out);
+      log.info("✅ Resent Reserved Event for existing reservation");
+      return;
+    }
+    
+    // items가 없거나 비어있는 경우 처리
+    if (evt.items() == null || evt.items().isEmpty()) {
+      log.warn("⚠️ OrderCreated event has no items: orderId={}", evt.orderId());
+      var out = new InventoryRejectedEvent(
+          UUID.randomUUID().toString(),
+          rejectedTopic(),
+          evt.orderId(),
+          "NO_ITEMS",
+          List.of(),
+          System.currentTimeMillis()
+      );
+      kafka.send(rejectedTopic(), evt.orderId(), out);
+      log.info("❌ Sent Rejected Event: NO_ITEMS");
+      return;
+    }
+    
+    // 재고 확인
+    boolean allOk = evt.items().stream().allMatch(this::hasStock);
+    log.info("📊 Stock check result: allOk={}", allOk);
 
     if (allOk) {
-      if (evt.items() != null) {
-        for (var it : evt.items()) {
-          log.info("Save inventory");
-          var inv = inventoryRepo.findById(it.sku()).orElseGet(() -> {
-            var newInv = new InventoryEntity();
-            newInv.setSku(it.sku());
-            newInv.setQty(0);
-            return newInv;
-          });
-          inv.setQty(inv.getQty() - it.qty());
-          inventoryRepo.save(inv);
+      // 재고 차감 및 예약
+      for (var it : evt.items()) {
+        log.info("📉 Reserving inventory: sku={}, qty={}", it.sku(), it.qty());
+        var inv = inventoryRepo.findById(it.sku()).orElseGet(() -> {
+          var newInv = new InventoryEntity();
+          newInv.setSku(it.sku());
+          newInv.setQty(0);
+          return newInv;
+        });
+        inv.setQty(inv.getQty() - it.qty());
+        inventoryRepo.save(inv);
 
-          reservationRepo.save(ReservationEntity.builder()
-              .orderId(evt.orderId())
-              .sku(it.sku())
-              .qty(it.qty())
-              .expiresAt(OffsetDateTime.now().plusMinutes(5))
-              .build());
-        }
+        reservationRepo.save(ReservationEntity.builder()
+            .orderId(evt.orderId())
+            .sku(it.sku())
+            .qty(it.qty())
+            .expiresAt(OffsetDateTime.now().plusMinutes(5))
+            .build());
       }
 
       var out = new InventoryReservedEvent(
           UUID.randomUUID().toString(),
           reservedTopic(),
           evt.orderId(),
-          evt.items() == null ? List.of() :
-              evt.items().stream()
-                  .map(i -> new InventoryReservedEvent.Item(i.sku(), i.qty()))
-                  .toList(),
+          evt.items().stream()
+              .map(i -> new InventoryReservedEvent.Item(i.sku(), i.qty()))
+              .toList(),
           System.currentTimeMillis()
       );
       kafka.send(reservedTopic(), evt.orderId(), out);
-      log.info("Send Reserved Event");
+      log.info("✅ Sent Reserved Event: orderId={}", evt.orderId());
 
     } else {
+      // 재고 부족
       var out = new InventoryRejectedEvent(
           UUID.randomUUID().toString(),
           rejectedTopic(),
           evt.orderId(),
           "OUT_OF_STOCK",
-          evt.items() == null ? List.of() :
-              evt.items().stream()
-                  .map(i -> new InventoryRejectedEvent.Item(i.sku(), i.qty()))
-                  .toList(),
+          evt.items().stream()
+              .map(i -> new InventoryRejectedEvent.Item(i.sku(), i.qty()))
+              .toList(),
           System.currentTimeMillis()
       );
       kafka.send(rejectedTopic(), evt.orderId(), out);
-      log.info("Send Rejected Event");
+      log.info("❌ Sent Rejected Event: OUT_OF_STOCK, orderId={}", evt.orderId());
     }
   }
 
   private boolean hasStock(OrderCreatedEvent.Item item) {
-    log.info("Item is {}", item);
-    log.info("DB Item is {}", inventoryRepo.findById(item.sku()));
-    return inventoryRepo.findById(item.sku())
-        .map(inv -> inv.getQty() >= item.qty())
-        .orElse(false);
+    var inventoryOpt = inventoryRepo.findById(item.sku());
+    if (inventoryOpt.isEmpty()) {
+      log.warn("⚠️ SKU not found in inventory: sku={}", item.sku());
+      return false;
+    }
+    
+    var inventory = inventoryOpt.get();
+    boolean hasEnough = inventory.getQty() >= item.qty();
+    log.info("📊 Stock check: sku={}, required={}, available={}, hasEnough={}",
+        item.sku(), item.qty(), inventory.getQty(), hasEnough);
+    return hasEnough;
   }
 
   /**

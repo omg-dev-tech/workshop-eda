@@ -3,9 +3,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Analytics Database Initialization Script
 
 -- Create database (run as postgres user)
--- CREATE DATABASE analytics_db;
--- CREATE USER analytics WITH PASSWORD 'analytics123';
--- GRANT ALL PRIVILEGES ON DATABASE analytics_db TO analytics;
+CREATE DATABASE analytics_db;
+CREATE USER analytics WITH PASSWORD 'analytics123';
+GRANT ALL PRIVILEGES ON DATABASE analytics_db TO analytics;
 
 -- Connect to analytics_db and run the following:
 

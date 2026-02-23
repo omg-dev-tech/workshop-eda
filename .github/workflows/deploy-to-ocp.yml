@@ -204,15 +204,19 @@ jobs:
           # Wait for pods to be ready
           sleep 30
           
-          NOT_RUNNING=$(oc get pods -n ${{ env.OCP_PROJECT }} --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+          # Get pods that are not Running or Succeeded (exclude Completed jobs)
+          NOT_RUNNING=$(oc get pods -n ${{ env.OCP_PROJECT }} --no-headers 2>/dev/null | \
+            grep -v "Completed" | \
+            grep -v "Running" | \
+            wc -l)
           
           if [ "$NOT_RUNNING" -gt 0 ]; then
             echo "❌ Some pods are not running:"
-            oc get pods -n ${{ env.OCP_PROJECT }} --field-selector=status.phase!=Running
+            oc get pods -n ${{ env.OCP_PROJECT }} --no-headers | grep -v "Completed" | grep -v "Running"
             exit 1
           fi
           
-          echo "✅ All pods are running"
+          echo "✅ All application pods are running (excluding completed jobs)"
       
       - name: Test API Gateway Health
         run: |

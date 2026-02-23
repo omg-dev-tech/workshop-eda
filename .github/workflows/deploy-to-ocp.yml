@@ -1,0 +1,394 @@
+name: Deploy to OpenShift with Instana Testing
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip Instana Synthetic Tests'
+        required: false
+        default: 'false'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/omg-dev-tech/workshop-eda
+  OCP_PROJECT: ${{ secrets.OCP_PROJECT || 'workshop-eda' }}
+  HELM_RELEASE_NAME: workshop-eda
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        service:
+          - name: order-service
+            context: ./order-service
+            dockerfile: ./order-service/Dockerfile
+          - name: inventory-service
+            context: ./inventory-service
+            dockerfile: ./inventory-service/Dockerfile
+          - name: fulfillment-service
+            context: ./fulfillment-service
+            dockerfile: ./fulfillment-service/Dockerfile
+          - name: payment-adapter-ext
+            context: ./payment-adapter-ext
+            dockerfile: ./payment-adapter-ext/Dockerfile
+          - name: analytics-service
+            context: ./analytics-service
+            dockerfile: ./analytics-service/Dockerfile
+          - name: api-gateway
+            context: ./api-gateway
+            dockerfile: ./api-gateway/Dockerfile
+          - name: web
+            context: ./web
+            dockerfile: ./web/Dockerfile
+          - name: load-generator
+            context: ./load-generator
+            dockerfile: ./load-generator/Dockerfile
+    
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=,format=short
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Image digest
+        run: echo "Image pushed - ${{ matrix.service.name }}:${{ steps.meta.outputs.version }}"
+
+  deploy-to-ocp:
+    name: Deploy to OpenShift
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    outputs:
+      previous_revision: ${{ steps.get-revision.outputs.revision }}
+      deployment_success: ${{ steps.deploy.outcome }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install OpenShift CLI
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          oc: "4.14"
+      
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+      
+      - name: Login to OpenShift
+        run: |
+          oc login --token=${{ secrets.OCP_TOKEN }} --server=${{ secrets.OCP_SERVER }} --insecure-skip-tls-verify=true
+          oc project ${{ env.OCP_PROJECT }}
+      
+      - name: Get current Helm revision
+        id: get-revision
+        run: |
+          REVISION=$(helm list -n ${{ env.OCP_PROJECT }} | grep ${{ env.HELM_RELEASE_NAME }} | awk '{print $3}' || echo "0")
+          echo "revision=$REVISION" >> $GITHUB_OUTPUT
+          echo "Current revision: $REVISION"
+      
+      - name: Deploy with Helm
+        id: deploy
+        run: |
+          cd helm/workshop-eda
+          
+          # Helm upgrade or install
+          if helm list -n ${{ env.OCP_PROJECT }} | grep -q ${{ env.HELM_RELEASE_NAME }}; then
+            echo "Upgrading existing release..."
+            helm upgrade ${{ env.HELM_RELEASE_NAME }} . \
+              --namespace ${{ env.OCP_PROJECT }} \
+              --set global.imageTag=latest \
+              --wait --timeout=10m
+          else
+            echo "Installing new release..."
+            helm install ${{ env.HELM_RELEASE_NAME }} . \
+              --namespace ${{ env.OCP_PROJECT }} \
+              --set global.imageTag=latest \
+              --wait --timeout=10m
+          fi
+      
+      - name: Wait for deployment rollout
+        run: |
+          echo "Waiting for all deployments to be ready..."
+          
+          DEPLOYMENTS=(
+            "order-service"
+            "inventory-service"
+            "fulfillment-service"
+            "payment-adapter-ext"
+            "analytics-service"
+            "api-gateway"
+            "web"
+          )
+          
+          for deployment in "${DEPLOYMENTS[@]}"; do
+            echo "Checking $deployment..."
+            oc rollout status deployment/$deployment -n ${{ env.OCP_PROJECT }} --timeout=5m || true
+          done
+      
+      - name: Get deployment info
+        if: always()
+        run: |
+          echo "=== Pods Status ==="
+          oc get pods -n ${{ env.OCP_PROJECT }}
+          
+          echo ""
+          echo "=== Services ==="
+          oc get svc -n ${{ env.OCP_PROJECT }}
+          
+          echo ""
+          echo "=== Routes ==="
+          oc get route -n ${{ env.OCP_PROJECT }}
+
+  health-check:
+    name: Health Check
+    needs: deploy-to-ocp
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Install OpenShift CLI
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          oc: "4.14"
+      
+      - name: Login to OpenShift
+        run: |
+          oc login --token=${{ secrets.OCP_TOKEN }} --server=${{ secrets.OCP_SERVER }} --insecure-skip-tls-verify=true
+          oc project ${{ env.OCP_PROJECT }}
+      
+      - name: Check Pod Status
+        run: |
+          echo "Checking if all pods are running..."
+          
+          # Wait for pods to be ready
+          sleep 30
+          
+          NOT_RUNNING=$(oc get pods -n ${{ env.OCP_PROJECT }} --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+          
+          if [ "$NOT_RUNNING" -gt 0 ]; then
+            echo "❌ Some pods are not running:"
+            oc get pods -n ${{ env.OCP_PROJECT }} --field-selector=status.phase!=Running
+            exit 1
+          fi
+          
+          echo "✅ All pods are running"
+      
+      - name: Test API Gateway Health
+        run: |
+          echo "Testing API Gateway health endpoint..."
+          
+          ROUTE_URL=$(oc get route api-gateway -n ${{ env.OCP_PROJECT }} -o jsonpath='{.spec.host}')
+          
+          if [ -z "$ROUTE_URL" ]; then
+            echo "❌ API Gateway route not found"
+            exit 1
+          fi
+          
+          echo "API Gateway URL: http://$ROUTE_URL"
+          
+          # Test health endpoint
+          for i in {1..5}; do
+            if curl -f -s "http://$ROUTE_URL/actuator/health" > /dev/null; then
+              echo "✅ API Gateway is healthy"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          
+          echo "❌ API Gateway health check failed"
+          exit 1
+      
+      - name: Test Web UI
+        run: |
+          echo "Testing Web UI..."
+          
+          ROUTE_URL=$(oc get route web -n ${{ env.OCP_PROJECT }} -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
+          
+          if [ -z "$ROUTE_URL" ]; then
+            echo "⚠️ Web UI route not found, skipping"
+            exit 0
+          fi
+          
+          if curl -f -s "http://$ROUTE_URL" > /dev/null; then
+            echo "✅ Web UI is accessible"
+          else
+            echo "⚠️ Web UI is not accessible (non-critical)"
+          fi
+
+  instana-synthetic-tests:
+    name: Run Instana Synthetic Tests
+    needs: health-check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.skip_tests != 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Make scripts executable
+        run: chmod +x scripts/instana-test.sh
+      
+      - name: Run Client Scenario Test
+        id: client-test
+        run: |
+          ./scripts/instana-test.sh \
+            --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
+            --base-url "${{ secrets.INSTANA_BASE_URL }}" \
+            --test-id "${{ secrets.INSTANA_CLIENT_TEST_ID }}" \
+            --location-id "${{ secrets.INSTANA_LOCATION_ID }}" \
+            --test-name "Client Scenario" \
+            --timeout 600
+      
+      - name: Run Admin Scenario Test
+        id: admin-test
+        run: |
+          ./scripts/instana-test.sh \
+            --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
+            --base-url "${{ secrets.INSTANA_BASE_URL }}" \
+            --test-id "${{ secrets.INSTANA_ADMIN_TEST_ID }}" \
+            --location-id "${{ secrets.INSTANA_LOCATION_ID }}" \
+            --test-name "Admin Scenario" \
+            --timeout 600
+      
+      - name: Test Results Summary
+        if: always()
+        run: |
+          echo "=== Instana Synthetic Test Results ==="
+          echo "Client Scenario: ${{ steps.client-test.outcome }}"
+          echo "Admin Scenario: ${{ steps.admin-test.outcome }}"
+
+  rollback:
+    name: Rollback on Failure
+    needs: [deploy-to-ocp, health-check, instana-synthetic-tests]
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install OpenShift CLI
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          oc: "4.14"
+      
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+      
+      - name: Login to OpenShift
+        run: |
+          oc login --token=${{ secrets.OCP_TOKEN }} --server=${{ secrets.OCP_SERVER }} --insecure-skip-tls-verify=true
+          oc project ${{ env.OCP_PROJECT }}
+      
+      - name: Make scripts executable
+        run: chmod +x scripts/rollback-ocp.sh
+      
+      - name: Execute Rollback
+        run: |
+          ./scripts/rollback-ocp.sh \
+            --project ${{ env.OCP_PROJECT }} \
+            --release ${{ env.HELM_RELEASE_NAME }} \
+            --revision ${{ needs.deploy-to-ocp.outputs.previous_revision }}
+      
+      - name: Send Failure Notification
+        if: always()
+        run: |
+          echo "=== Deployment Failed - Rollback Executed ==="
+          echo "Previous revision: ${{ needs.deploy-to-ocp.outputs.previous_revision }}"
+          echo "Failed stage: Check workflow logs for details"
+          
+          # Slack notification (if webhook is configured)
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+              -H 'Content-Type: application/json' \
+              -d '{
+                "text": "❌ Workshop EDA Deployment Failed",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*Deployment Failed - Rollback Executed*\n\nProject: `${{ env.OCP_PROJECT }}`\nCommit: `${{ github.sha }}`\nAuthor: ${{ github.actor }}"
+                    }
+                  }
+                ]
+              }' || echo "Slack notification failed (non-critical)"
+          fi
+
+  success-notification:
+    name: Success Notification
+    needs: [deploy-to-ocp, health-check, instana-synthetic-tests]
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+      - name: Send Success Notification
+        run: |
+          echo "=== Deployment Successful ==="
+          echo "Project: ${{ env.OCP_PROJECT }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "All tests passed!"
+          
+          # Slack notification (if webhook is configured)
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+              -H 'Content-Type: application/json' \
+              -d '{
+                "text": "✅ Workshop EDA Deployment Successful",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*Deployment Successful*\n\nProject: `${{ env.OCP_PROJECT }}`\nCommit: `${{ github.sha }}`\nAuthor: ${{ github.actor }}\n\n✅ All health checks passed\n✅ Instana synthetic tests passed"
+                    }
+                  }
+                ]
+              }' || echo "Slack notification failed (non-critical)"
+          fi
+
+# Made with Bob

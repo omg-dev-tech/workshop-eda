@@ -92,8 +92,19 @@ echo ""
 trigger_test() {
     echo -e "${BLUE}[INFO]${NC} Triggering test..." >&2
     
-    # Prepare JSON payload
-    JSON_PAYLOAD="[{\"testId\":\"${TEST_ID}\",\"customization\":{\"locations\":[\"${LOCATION_ID}\"]}}]"
+    # Prepare environment variables for Instana
+    ENV_VARS=""
+    if [ -n "${API_GATEWAY_URL:-}" ]; then
+        ENV_VARS="\"environmentVariables\":{\"BASE_URL\":\"${API_GATEWAY_URL}\",\"API_GATEWAY_URL\":\"${API_GATEWAY_URL}\"},"
+        echo -e "${BLUE}[INFO]${NC} Passing environment variables to Instana:" >&2
+        echo -e "${BLUE}[INFO]${NC}   BASE_URL=${API_GATEWAY_URL}" >&2
+        echo -e "${BLUE}[INFO]${NC}   API_GATEWAY_URL=${API_GATEWAY_URL}" >&2
+    fi
+    
+    # Prepare JSON payload with environment variables
+    JSON_PAYLOAD="[{\"testId\":\"${TEST_ID}\",${ENV_VARS}\"customization\":{\"locations\":[\"${LOCATION_ID}\"]}}]"
+    
+    echo -e "${BLUE}[DEBUG]${NC} JSON Payload: ${JSON_PAYLOAD}" >&2
     
     RESPONSE=$(curl -k -s -w "\n%{http_code}" -X POST \
         "${BASE_URL}/api/synthetics/settings/tests/ci-cd" \

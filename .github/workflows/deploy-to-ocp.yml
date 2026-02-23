@@ -296,6 +296,8 @@ jobs:
       
       - name: Run Client Scenario Test
         id: client-test
+        env:
+          API_GATEWAY_URL: ${{ vars.API_GATEWAY_URL }}
         run: |
           ./scripts/instana-test.sh \
             --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
@@ -307,6 +309,8 @@ jobs:
       
       - name: Run Admin Scenario Test
         id: admin-test
+        env:
+          API_GATEWAY_URL: ${{ vars.API_GATEWAY_URL }}
         run: |
           ./scripts/instana-test.sh \
             --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
@@ -318,6 +322,8 @@ jobs:
       
       - name: Run API Module Tests
         id: api-test
+        env:
+          API_GATEWAY_URL: ${{ vars.API_GATEWAY_URL }}
         run: |
           ./scripts/instana-test.sh \
             --api-token "${{ secrets.INSTANA_API_TOKEN }}" \

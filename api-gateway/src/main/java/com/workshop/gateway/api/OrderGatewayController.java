@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -27,10 +28,13 @@ public class OrderGatewayController {
     return orders.create(req, forcePayment);
   }
 
-  // 주문 목록 조회
+  // 주문 목록 조회 (페이징 적용)
   @GetMapping("/orders")
-  public List<OrderView> getAll() {
-    return orders.getAll();
+  public Map<String, Object> getAll(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size
+  ) {
+    return orders.getAll(page, size);
   }
 
   // 주문 조회(상태 확인)

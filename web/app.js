@@ -124,11 +124,14 @@ async function createOrder(event) {
     }
 }
 
-// 고객 주문 목록 조회
+// 고객 주문 목록 조회 (페이징 적용)
 async function loadClientOrders() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/orders`);
-        const orders = await response.json();
+        const response = await fetch(`${API_BASE_URL}/api/orders?page=0&size=20`);
+        const data = await response.json();
+        
+        // Page 객체에서 content 추출
+        const orders = data.content || [];
         
         // 최근 10개만 표시
         const recentOrders = orders.slice(0, 10);
@@ -139,11 +142,14 @@ async function loadClientOrders() {
     }
 }
 
-// 전체 주문 목록 조회 (관리자)
+// 전체 주문 목록 조회 (관리자, 페이징 적용)
 async function loadAllOrders() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/orders`);
-        const orders = await response.json();
+        const response = await fetch(`${API_BASE_URL}/api/orders?page=0&size=20`);
+        const data = await response.json();
+        
+        // Page 객체에서 content 추출
+        const orders = data.content || [];
         displayOrders(orders, 'allOrders');
     } catch (error) {
         console.error('Error:', error);
@@ -371,11 +377,14 @@ async function deleteInventory(sku) {
     }
 }
 
-// 배송 목록 조회
+// 배송 목록 조회 (페이징 적용)
 async function loadFulfillments() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/admin/fulfillments`);
-        const fulfillments = await response.json();
+        const response = await fetch(`${API_BASE_URL}/api/admin/fulfillments?page=0&size=20`);
+        const data = await response.json();
+        
+        // Page 객체에서 content 추출
+        const fulfillments = data.content || [];
         displayFulfillments(fulfillments);
     } catch (error) {
         console.error('Error:', error);

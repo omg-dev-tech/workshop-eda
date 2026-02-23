@@ -116,18 +116,25 @@ console.log(`Start Time: ${new Date().toISOString()}`);
   // 1. Order API 테스트
   // ============================================================================
   
-  await runTest('Order API - 전체 조회', async () => {
-    const result = await makeRequest('GET', '/api/admin/orders');
+  await runTest('Order API - 전체 조회 (페이징)', async () => {
+    const result = await makeRequest('GET', '/api/admin/orders?page=0&size=20');
     
     assert.ok(result.success, 'Request failed');
-    assert.ok(Array.isArray(result.data), 'Response should be an array');
+    assert.ok(result.data, 'Response data should exist');
     
-    console.log(`  - Found ${result.data.length} orders`);
+    // Page 객체 구조 확인
+    const orders = result.data.content || result.data;
+    assert.ok(Array.isArray(orders), 'Orders content should be an array');
+    
+    console.log(`  - Found ${orders.length} orders (page 0, size 20)`);
+    if (result.data.totalElements !== undefined) {
+      console.log(`  - Total elements: ${result.data.totalElements}`);
+    }
     console.log(`  - Response time: ${result.duration}ms`);
     
     // 첫 번째 주문 ID 저장 (단건 조회용)
-    if (result.data.length > 0) {
-      orderIds = result.data.slice(0, 3).map(order => order.id);
+    if (orders.length > 0) {
+      orderIds = orders.slice(0, 3).map(order => order.id);
       console.log(`  - Sample order IDs: ${orderIds.join(', ')}`);
     }
   });
@@ -193,18 +200,25 @@ console.log(`Start Time: ${new Date().toISOString()}`);
   // 3. Fulfillment API 테스트
   // ============================================================================
   
-  await runTest('Fulfillment API - 전체 조회', async () => {
-    const result = await makeRequest('GET', '/api/admin/fulfillments');
+  await runTest('Fulfillment API - 전체 조회 (페이징)', async () => {
+    const result = await makeRequest('GET', '/api/admin/fulfillments?page=0&size=20');
     
     assert.ok(result.success, 'Request failed');
-    assert.ok(Array.isArray(result.data), 'Response should be an array');
+    assert.ok(result.data, 'Response data should exist');
     
-    console.log(`  - Found ${result.data.length} fulfillments`);
+    // Page 객체 구조 확인
+    const fulfillments = result.data.content || result.data;
+    assert.ok(Array.isArray(fulfillments), 'Fulfillments content should be an array');
+    
+    console.log(`  - Found ${fulfillments.length} fulfillments (page 0, size 20)`);
+    if (result.data.totalElements !== undefined) {
+      console.log(`  - Total elements: ${result.data.totalElements}`);
+    }
     console.log(`  - Response time: ${result.duration}ms`);
     
     // 첫 번째 fulfillment ID 저장 (단건 조회용)
-    if (result.data.length > 0) {
-      fulfillmentIds = result.data.slice(0, 3).map(f => f.id);
+    if (fulfillments.length > 0) {
+      fulfillmentIds = fulfillments.slice(0, 3).map(f => f.id);
       console.log(`  - Sample fulfillment IDs: ${fulfillmentIds.join(', ')}`);
     }
   });

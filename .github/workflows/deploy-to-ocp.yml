@@ -16,6 +16,7 @@ env:
   IMAGE_PREFIX: ghcr.io/omg-dev-tech/workshop-eda
   OCP_PROJECT: ${{ secrets.OCP_PROJECT || 'workshop-eda' }}
   HELM_RELEASE_NAME: workshop-eda
+  INSTANA_APPLICATION_NAME: ${{ vars.INSTANA_APPLICATION_NAME || 'workshop-eda' }}
 
 jobs:
   build-and-push:
@@ -181,9 +182,28 @@ jobs:
           echo "=== Routes ==="
           oc get route -n ${{ env.OCP_PROJECT }}
 
+  create-deploy-release-marker:
+    name: Create Deploy Release Marker
+    needs: deploy-to-ocp
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Create Deploy Release Marker
+        run: |
+          chmod +x ./scripts/instana-release-marker.sh
+          ./scripts/instana-release-marker.sh \
+            --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
+            --base-url "${{ secrets.INSTANA_BASE_URL }}" \
+            --release-name "Deploy-${{ github.sha }}" \
+            --applications "${{ env.INSTANA_APPLICATION_NAME }}"
+
   health-check:
     name: Health Check
-    needs: deploy-to-ocp
+    needs: create-deploy-release-marker
     runs-on: ubuntu-latest
     
     steps:
@@ -375,6 +395,24 @@ jobs:
               }' || echo "Slack notification failed (non-critical)"
           fi
       
+      - name: Verify Rollback
+        run: |
+          echo "Verifying rollback completion..."
+          sleep 30
+          
+          # Check if pods are running after rollback
+          NOT_RUNNING=$(oc get pods -n ${{ env.OCP_PROJECT }} --no-headers 2>/dev/null | \
+            grep -v "Completed" | \
+            grep -v "Running" | \
+            wc -l)
+          
+          if [ "$NOT_RUNNING" -gt 0 ]; then
+            echo "⚠️ Some pods are not running after rollback"
+            oc get pods -n ${{ env.OCP_PROJECT }}
+          else
+            echo "✅ Rollback completed successfully"
+          fi
+      
       - name: Create Rollback Release Marker
         if: success()
         run: |
@@ -382,29 +420,12 @@ jobs:
           ./scripts/instana-release-marker.sh \
             --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
             --base-url "${{ secrets.INSTANA_BASE_URL }}" \
-            --release-name "Rollback-${{ github.sha }}"
-
-  create-release-marker:
-    name: Create Instana Release Marker
-    needs: [deploy-to-ocp, health-check, instana-synthetic-tests]
-    runs-on: ubuntu-latest
-    if: success()
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Create Release Marker
-        run: |
-          chmod +x ./scripts/instana-release-marker.sh
-          ./scripts/instana-release-marker.sh \
-            --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
-            --base-url "${{ secrets.INSTANA_BASE_URL }}" \
-            --release-name "Deploy-${{ github.sha }}"
+            --release-name "Rollback-${{ github.sha }}" \
+            --applications "${{ env.INSTANA_APPLICATION_NAME }}"
 
   success-notification:
     name: Success Notification
-    needs: [deploy-to-ocp, health-check, instana-synthetic-tests, create-release-marker]
+    needs: instana-synthetic-tests
     runs-on: ubuntu-latest
     if: success()
     

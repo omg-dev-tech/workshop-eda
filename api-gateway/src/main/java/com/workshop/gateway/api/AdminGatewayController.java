@@ -57,11 +57,18 @@ public class AdminGatewayController {
 
   // Fulfillment APIs
   @GetMapping("/fulfillments")
-  public ResponseEntity<List<FulfillmentView>> getAllFulfillments() {
+  public ResponseEntity<?> getAllFulfillments(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size
+  ) {
     return ResponseEntity.ok(fulfillmentRestClient.get()
-        .uri("/fulfillments")
+        .uri(uriBuilder -> uriBuilder
+            .path("/fulfillments")
+            .queryParam("page", page)
+            .queryParam("size", size)
+            .build())
         .retrieve()
-        .body(new ParameterizedTypeReference<List<FulfillmentView>>() {}));
+        .body(Map.class));
   }
 
   @PutMapping("/fulfillments/{id}/ship")

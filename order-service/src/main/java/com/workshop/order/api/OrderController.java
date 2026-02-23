@@ -5,6 +5,9 @@ import com.workshop.order.api.dto.CreateOrderRes;
 import com.workshop.order.domain.OrderEntity;
 import com.workshop.order.domain.OrderRepository;
 import com.workshop.order.service.OrderService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,10 +33,14 @@ public class OrderController {
     return new CreateOrderRes(saved.getId().toString(), saved.getStatus().name());
   }
 
-  // 주문 목록 조회
+  // 주문 목록 조회 (페이징 적용)
   @GetMapping
-  public List<OrderEntity> getAll() {
-    return repo.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
+  public Page<OrderEntity> getAll(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size
+  ) {
+    Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+    return repo.findAll(pageable);
   }
 
   // 주문 상세 조회

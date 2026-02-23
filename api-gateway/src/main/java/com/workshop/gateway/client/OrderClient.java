@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -27,11 +28,15 @@ public class OrderClient {
     return builder.retrieve().body(OrderCreateResponse.class);
   }
 
-  public List<OrderView> getAll() {
+  public Map<String, Object> getAll(int page, int size) {
     return orderRestClient.get()
-        .uri("/orders")
+        .uri(uriBuilder -> uriBuilder
+            .path("/orders")
+            .queryParam("page", page)
+            .queryParam("size", size)
+            .build())
         .retrieve()
-        .body(new ParameterizedTypeReference<List<OrderView>>() {});
+        .body(new ParameterizedTypeReference<Map<String, Object>>() {});
   }
 
   public OrderView get(String orderId) {

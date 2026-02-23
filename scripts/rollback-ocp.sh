@@ -155,17 +155,24 @@ verify_rollback() {
     # Check pod status
     log_info "Checking pod status..."
     
-    NOT_RUNNING=$(oc get pods -n "${PROJECT_NAME}" --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+    # Get pods that are not Running or Succeeded (exclude Completed jobs)
+    NOT_RUNNING=$(oc get pods -n "${PROJECT_NAME}" --no-headers 2>/dev/null | \
+        grep -v "Completed" | \
+        grep -v "Running" | \
+        wc -l)
     
     if [ "$NOT_RUNNING" -gt 0 ]; then
         log_warning "Some pods are not running after rollback:"
-        oc get pods -n "${PROJECT_NAME}" --field-selector=status.phase!=Running
+        oc get pods -n "${PROJECT_NAME}" --no-headers | grep -v "Completed" | grep -v "Running"
         
         # Wait a bit more
         log_info "Waiting 30s for pods to stabilize..."
         sleep 30
         
-        NOT_RUNNING=$(oc get pods -n "${PROJECT_NAME}" --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+        NOT_RUNNING=$(oc get pods -n "${PROJECT_NAME}" --no-headers 2>/dev/null | \
+            grep -v "Completed" | \
+            grep -v "Running" | \
+            wc -l)
         
         if [ "$NOT_RUNNING" -gt 0 ]; then
             log_error "Rollback verification failed - pods not running"
@@ -173,7 +180,7 @@ verify_rollback() {
         fi
     fi
     
-    log_success "All pods are running"
+    log_success "All application pods are running (excluding completed jobs)"
     
     # Check deployment status
     log_info "Checking deployment status..."

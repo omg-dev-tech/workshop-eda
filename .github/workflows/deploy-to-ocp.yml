@@ -296,12 +296,24 @@ jobs:
             --test-name "Admin Scenario" \
             --timeout 600
       
+      - name: Run API Module Tests
+        id: api-test
+        run: |
+          ./scripts/instana-test.sh \
+            --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
+            --base-url "${{ secrets.INSTANA_BASE_URL }}" \
+            --test-id "${{ secrets.INSTANA_API_TEST_ID }}" \
+            --location-id "${{ secrets.INSTANA_LOCATION_ID }}" \
+            --test-name "API Module Tests" \
+            --timeout 600
+      
       - name: Test Results Summary
         if: always()
         run: |
           echo "=== Instana Synthetic Test Results ==="
           echo "Client Scenario: ${{ steps.client-test.outcome }}"
           echo "Admin Scenario: ${{ steps.admin-test.outcome }}"
+          echo "API Module Tests: ${{ steps.api-test.outcome }}"
 
   rollback:
     name: Rollback on Failure
@@ -362,10 +374,37 @@ jobs:
                 ]
               }' || echo "Slack notification failed (non-critical)"
           fi
+      
+      - name: Create Rollback Release Marker
+        if: success()
+        run: |
+          chmod +x ./scripts/instana-release-marker.sh
+          ./scripts/instana-release-marker.sh \
+            --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
+            --base-url "${{ secrets.INSTANA_BASE_URL }}" \
+            --release-name "Rollback-${{ github.sha }}"
+
+  create-release-marker:
+    name: Create Instana Release Marker
+    needs: [deploy-to-ocp, health-check, instana-synthetic-tests]
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Create Release Marker
+        run: |
+          chmod +x ./scripts/instana-release-marker.sh
+          ./scripts/instana-release-marker.sh \
+            --api-token "${{ secrets.INSTANA_API_TOKEN }}" \
+            --base-url "${{ secrets.INSTANA_BASE_URL }}" \
+            --release-name "Deploy-${{ github.sha }}"
 
   success-notification:
     name: Success Notification
-    needs: [deploy-to-ocp, health-check, instana-synthetic-tests]
+    needs: [deploy-to-ocp, health-check, instana-synthetic-tests, create-release-marker]
     runs-on: ubuntu-latest
     if: success()
     

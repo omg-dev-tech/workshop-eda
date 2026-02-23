@@ -137,10 +137,14 @@ echo "JSON Payload:"
 echo "$JSON_PAYLOAD"
 echo ""
 
-# Release Marker 생성 API 호출
+# Content-Length 계산
+CONTENT_LENGTH=${#JSON_PAYLOAD}
+
+# Release Marker 생성 API 호출 (Content-Length 헤더 추가)
 RESPONSE=$(curl -k -s -w "\n%{http_code}" --location --request POST "${BASE_URL}/api/releases" \
   --header "Authorization: apiToken ${API_TOKEN}" \
   --header "Content-Type: application/json" \
+  --header "Content-Length: ${CONTENT_LENGTH}" \
   --data "$JSON_PAYLOAD")
 
 # HTTP 상태 코드 추출
@@ -160,6 +164,9 @@ if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
 else
     echo -e "${RED}❌ Failed to create release marker${NC}"
     echo -e "${RED}   HTTP Code: $HTTP_CODE${NC}"
+    echo -e "${RED}   Request URL: $BASE_URL/api/releases${NC}"
+    echo -e "${RED}   Content-Length: $CONTENT_LENGTH${NC}"
+    echo -e "${RED}   Payload Size: ${#JSON_PAYLOAD} bytes${NC}"
     echo -e "${RED}   Response: $BODY${NC}"
     exit 1
 fi

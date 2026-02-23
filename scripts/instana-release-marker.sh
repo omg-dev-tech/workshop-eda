@@ -116,7 +116,7 @@ if [ -n "$APPLICATIONS" ]; then
             APPLICATIONS_JSON="${APPLICATIONS_JSON}, {\"name\": \"${app}\"}"
         fi
     done
-    APPLICATIONS_JSON="${APPLICATIONS_JSON}],"
+    APPLICATIONS_JSON="${APPLICATIONS_JSON}]"
 fi
 echo ""
 

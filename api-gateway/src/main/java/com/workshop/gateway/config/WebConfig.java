@@ -19,9 +19,8 @@ public class WebConfig {
         r.addMapping("/**")
          .allowedOrigins(allowedOrigins.split(","))
          .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
-         .allowedHeaders("Content-Type","Authorization",
-                         "X-INSTANA-T","X-INSTANA-S","X-INSTANA-L") // ← 중요
-         .exposedHeaders("Server-Timing") // ← 브라우저가 읽을 수 있게
+         .allowedHeaders("*") // 모든 헤더 허용
+         .exposedHeaders("*") // 모든 헤더 노출
          .allowCredentials(false);
       }
     };

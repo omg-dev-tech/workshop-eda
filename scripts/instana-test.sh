@@ -82,6 +82,9 @@ echo "Test ID: ${TEST_ID}"
 echo "Location ID: ${LOCATION_ID}"
 echo "Base URL: ${BASE_URL}"
 echo ""
+echo -e "${BLUE}[DEBUG]${NC} Full Trigger URL: ${BASE_URL}/api/synthetics/settings/tests/ci-cd"
+echo -e "${BLUE}[DEBUG]${NC} Full Check URL: ${BASE_URL}/api/synthetics/settings/tests/ci-cd/{result_id}"
+echo ""
 
 ################################################################################
 # Function: Trigger Synthetic Test
@@ -93,7 +96,7 @@ trigger_test() {
     JSON_PAYLOAD="[{\"testId\":\"${TEST_ID}\",\"customization\":{\"locations\":[\"${LOCATION_ID}\"]}}]"
     
     RESPONSE=$(curl -k -s -w "\n%{http_code}" -X POST \
-        "${BASE_URL}/synthetics/settings/tests/ci-cd" \
+        "${BASE_URL}/api/synthetics/settings/tests/ci-cd" \
         -H "Authorization: apiToken ${API_TOKEN}" \
         -H "Content-Type: application/json" \
         -d "${JSON_PAYLOAD}")
@@ -132,7 +135,7 @@ check_result() {
     local result_id=$1
     
     RESPONSE=$(curl -k -s -w "\n%{http_code}" \
-        "${BASE_URL}/synthetics/settings/tests/ci-cd/${result_id}" \
+        "${BASE_URL}/api/synthetics/settings/tests/ci-cd/${result_id}" \
         -H "Authorization: apiToken ${API_TOKEN}")
     
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)

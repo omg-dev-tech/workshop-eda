@@ -219,9 +219,34 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
     case "$STATUS" in
         "SUCCESS"|"PASSED"|"success"|"passed"|"COMPLETED")
             echo ""
-            echo -e "${GREEN}=== Test Passed ===${NC}"
+            echo -e "${BLUE}[INFO]${NC} Test completed. Verifying results..."
+            
+            # 테스트 결과 상세 조회
+            RESULT_DETAILS=$(curl -k -s \
+                -H "Authorization: apiToken ${API_TOKEN}" \
+                "${BASE_URL}/api/synthetics/settings/tests/ci-cd/${RESULT_ID}")
+            
+            # 성공률 추출 및 검증
+            SUCCESS_RATE=$(echo "$RESULT_DETAILS" | jq -r '.successRate // 0')
+            
+            echo ""
+            echo -e "${BLUE}=== Test Results ===${NC}"
             echo "Test Name: ${TEST_NAME}"
             echo "Duration: ${ELAPSED}s"
+            echo "Success Rate: ${SUCCESS_RATE}%"
+            
+            # 100% 성공이 아니면 실패 처리
+            if [ "$SUCCESS_RATE" != "100" ]; then
+                echo ""
+                echo -e "${RED}❌ Test failed with success rate: ${SUCCESS_RATE}%${NC}"
+                echo ""
+                echo -e "${YELLOW}Failed tests:${NC}"
+                echo "$RESULT_DETAILS" | jq -r '.results[]? | select(.success == false) | "  - \(.name): \(.error // "Unknown error")"' 2>/dev/null || echo "  (Unable to parse failed test details)"
+                exit 1
+            fi
+            
+            echo ""
+            echo -e "${GREEN}✅ All tests passed (100%)${NC}"
             exit 0
             ;;
         "FAILED"|"FAILURE"|"failed"|"failure"|"ERROR"|"error")

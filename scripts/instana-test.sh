@@ -228,8 +228,14 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
             echo ""
             echo -e "${BLUE}[INFO]${NC} Test completed. Verifying results..."
             
-            # 테스트 결과 상세 조회 - results/list API 사용
-            PAYLOAD=$(cat <<EOF
+            # 결과 인덱싱 대기 (최대 60초)
+            RETRY_COUNT=0
+            MAX_RETRIES=6
+            RESULT_FOUND=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                # 테스트 결과 상세 조회 - results/list API 사용
+                PAYLOAD=$(cat <<EOF
 {
   "syntheticMetrics": ["errors"],
   "tagFilterExpression": {
@@ -245,35 +251,49 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
 }
 EOF
 )
-            
-            RESULT_DETAILS=$(curl -k -s \
-                -H "Content-Type: application/json" \
-                -H "Authorization: apiToken ${API_TOKEN}" \
-                -d "$PAYLOAD" \
-                "${BASE_URL}/api/synthetics/results/list")
-            
-            # errors 배열 확인
-            if command -v jq &> /dev/null; then
-                TOTAL_HITS=$(echo "$RESULT_DETAILS" | jq -r '.totalHits // 0' 2>/dev/null)
-                ERROR_COUNT=$(echo "$RESULT_DETAILS" | jq -r '.items[0].testResultCommonProperties.errors | length' 2>/dev/null)
-                ERRORS=$(echo "$RESULT_DETAILS" | jq -r '.items[0].testResultCommonProperties.errors[]?' 2>/dev/null)
-            else
-                TOTAL_HITS="0"
-                ERROR_COUNT=""
-                ERRORS=""
-            fi
+                
+                RESULT_DETAILS=$(curl -k -s \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: apiToken ${API_TOKEN}" \
+                    -d "$PAYLOAD" \
+                    "${BASE_URL}/api/synthetics/results/list")
+                
+                # errors 배열 확인
+                if command -v jq &> /dev/null; then
+                    TOTAL_HITS=$(echo "$RESULT_DETAILS" | jq -r '.totalHits // 0' 2>/dev/null)
+                    ERROR_COUNT=$(echo "$RESULT_DETAILS" | jq -r '.items[0].testResultCommonProperties.errors | length' 2>/dev/null)
+                    ERRORS=$(echo "$RESULT_DETAILS" | jq -r '.items[0].testResultCommonProperties.errors[]?' 2>/dev/null)
+                else
+                    TOTAL_HITS="0"
+                    ERROR_COUNT=""
+                    ERRORS=""
+                fi
+                
+                # 결과가 인덱싱되었는지 확인
+                if [ "$TOTAL_HITS" != "0" ]; then
+                    RESULT_FOUND=true
+                    break
+                fi
+                
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                    echo -e "${BLUE}[INFO]${NC} Results still indexing, waiting 10s... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+                    sleep 10
+                fi
+            done
             
             echo ""
             echo -e "${BLUE}=== Test Results ===${NC}"
             echo "Test Name: ${TEST_NAME}"
             echo "Duration: ${ELAPSED}s"
             
-            # 결과가 없으면 성공으로 처리 (아직 인덱싱 중일 수 있음)
-            if [ "$TOTAL_HITS" = "0" ]; then
+            # 결과를 찾지 못한 경우 경고 후 실패 처리
+            if [ "$RESULT_FOUND" = false ]; then
                 echo "Status: Completed (results pending indexing)"
                 echo ""
-                echo -e "${GREEN}✅ Test passed (no errors detected)${NC}"
-                exit 0
+                echo -e "${YELLOW}⚠️  Warning: Could not fetch test results after $MAX_RETRIES attempts${NC}"
+                echo "Test may still be processing. Check Instana UI for results."
+                exit 1
             fi
             
             # 에러가 있으면 실패 처리

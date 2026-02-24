@@ -39,6 +39,11 @@ public class OrderController {
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size
   ) {
+    // 의도적인 런타임 오류 주입 (Synthetic Test 실패 유도)
+    if (true) {
+      throw new RuntimeException("Intentional error for rollback test");
+    }
+    
     Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
     return repo.findAll(pageable);
   }

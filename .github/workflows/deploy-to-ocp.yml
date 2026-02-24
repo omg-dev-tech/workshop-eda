@@ -107,6 +107,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      
       - name: Install OpenShift CLI
         uses: redhat-actions/openshift-tools-installer@v1
         with:
@@ -134,18 +138,20 @@ jobs:
         run: |
           cd helm/workshop-eda
           
+          echo "Deploying with image tag: ${{ steps.sha.outputs.short }}"
+          
           # Helm upgrade or install
           if helm list -n ${{ env.OCP_PROJECT }} | grep -q ${{ env.HELM_RELEASE_NAME }}; then
             echo "Upgrading existing release..."
             helm upgrade ${{ env.HELM_RELEASE_NAME }} . \
               --namespace ${{ env.OCP_PROJECT }} \
-              --set global.imageTag=${{ github.sha }} \
+              --set global.imageTag=${{ steps.sha.outputs.short }} \
               --wait --timeout=10m
           else
             echo "Installing new release..."
             helm install ${{ env.HELM_RELEASE_NAME }} . \
               --namespace ${{ env.OCP_PROJECT }} \
-              --set global.imageTag=${{ github.sha }} \
+              --set global.imageTag=${{ steps.sha.outputs.short }} \
               --wait --timeout=10m
           fi
       

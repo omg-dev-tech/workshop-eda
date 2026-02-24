@@ -139,13 +139,13 @@ jobs:
             echo "Upgrading existing release..."
             helm upgrade ${{ env.HELM_RELEASE_NAME }} . \
               --namespace ${{ env.OCP_PROJECT }} \
-              --set global.imageTag=latest \
+              --set global.imageTag=${{ github.sha }} \
               --wait --timeout=10m
           else
             echo "Installing new release..."
             helm install ${{ env.HELM_RELEASE_NAME }} . \
               --namespace ${{ env.OCP_PROJECT }} \
-              --set global.imageTag=latest \
+              --set global.imageTag=${{ github.sha }} \
               --wait --timeout=10m
           fi
       

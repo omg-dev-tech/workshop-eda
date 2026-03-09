@@ -108,12 +108,12 @@ apps:
     schedule: "*/10 * * * *"  # 10분마다 실행
     env:
       API_GATEWAY_URL: http://api-gateway:8080
-      TPS: "10"  # Transactions Per Second
+      TPS: "1"  # Transactions Per Second (1/10 reduced)
       DURATION: "300"  # 5분 (초 단위)
-      WORKERS: "10"
-      REPLENISH_INTERVAL: "30"  # 재고 보충 주기 (초)
-      SHIP_INTERVAL: "20"  # 배송 처리 주기 (초)
-      REPLENISH_QTY: "100"  # 재고 보충 수량
+      WORKERS: "1"  # (1/10 reduced)
+      REPLENISH_INTERVAL: "300"  # 재고 보충 주기 (초) (10x increased)
+      SHIP_INTERVAL: "200"  # 배송 처리 주기 (초) (10x increased)
+      REPLENISH_QTY: "10"  # 재고 보충 수량 (1/10 reduced)
 
 # OCP 배포 참고사항:
 # 1. Kafka, PostgreSQL 등 인프라 서비스는 별도로 배포 필요

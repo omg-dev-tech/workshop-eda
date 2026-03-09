@@ -8,12 +8,12 @@ from typing import Dict, List
 
 # 환경변수
 API_GATEWAY_URL = os.getenv('API_GATEWAY_URL', 'http://api-gateway:8080')
-TPS = int(os.getenv('TPS', '10'))  # Transactions Per Second
+TPS = int(os.getenv('TPS', '1'))  # Transactions Per Second (1/10 reduced)
 DURATION = int(os.getenv('DURATION', '60'))  # seconds (0 = 무한 실행)
-WORKERS = int(os.getenv('WORKERS', '10'))
-REPLENISH_INTERVAL = int(os.getenv('REPLENISH_INTERVAL', '30'))  # 재고 보충 주기 (초)
-SHIP_INTERVAL = int(os.getenv('SHIP_INTERVAL', '20'))  # 배송 처리 주기 (초)
-REPLENISH_QTY = int(os.getenv('REPLENISH_QTY', '100'))  # 재고 보충 수량
+WORKERS = int(os.getenv('WORKERS', '1'))  # (1/10 reduced)
+REPLENISH_INTERVAL = int(os.getenv('REPLENISH_INTERVAL', '300'))  # 재고 보충 주기 (초) (10x increased)
+SHIP_INTERVAL = int(os.getenv('SHIP_INTERVAL', '200'))  # 배송 처리 주기 (초) (10x increased)
+REPLENISH_QTY = int(os.getenv('REPLENISH_QTY', '10'))  # 재고 보충 수량 (1/10 reduced)
 LOOP_MODE = os.getenv('LOOP_MODE', 'false').lower() == 'true'  # 무한 루프 모드
 
 # 샘플 데이터

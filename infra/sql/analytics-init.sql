@@ -25,6 +25,28 @@ CREATE INDEX IF NOT EXISTS idx_event_type ON event_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_aggregate_id ON event_log(aggregate_id);
 CREATE INDEX IF NOT EXISTS idx_timestamp ON event_log(timestamp);
 
+-- Event Count Summary Table
+-- 이벤트 타입별 카운트 집계 테이블 (성능 개선용)
+-- 전체 테이블 스캔 대신 집계된 카운트를 빠르게 조회
+CREATE TABLE IF NOT EXISTS event_count_summary (
+    event_type VARCHAR(100) PRIMARY KEY,
+    count BIGINT NOT NULL DEFAULT 0,
+    last_updated TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- 기존 event_log 데이터를 기반으로 초기 집계 데이터 생성
+INSERT INTO event_count_summary (event_type, count, last_updated)
+SELECT
+    event_type,
+    COUNT(*) as count,
+    NOW() as last_updated
+FROM event_log
+GROUP BY event_type
+ON CONFLICT (event_type) DO UPDATE
+SET
+    count = EXCLUDED.count,
+    last_updated = EXCLUDED.last_updated;
+
 -- Order Metrics Table
 -- 시간대별 주문 통계
 CREATE TABLE IF NOT EXISTS order_metrics (

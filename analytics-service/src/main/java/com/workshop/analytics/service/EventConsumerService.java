@@ -1,15 +1,19 @@
 package com.workshop.analytics.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workshop.analytics.domain.EventCountSummaryEntity;
+import com.workshop.analytics.domain.EventCountSummaryRepository;
 import com.workshop.analytics.domain.EventLogEntity;
 import com.workshop.analytics.domain.EventLogRepository;
 import com.workshop.analytics.events.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -19,6 +23,7 @@ import java.util.UUID;
 public class EventConsumerService {
 
     private final EventLogRepository eventLogRepository;
+    private final EventCountSummaryRepository eventCountSummaryRepository;
     private final MetricsCollectorService metricsCollector;
     private final ObjectMapper objectMapper;
 
@@ -123,6 +128,14 @@ public class EventConsumerService {
         }
     }
 
+    /**
+     * 이벤트 로그 저장 및 집계 테이블 업데이트
+     *
+     * 성능 개선 사항:
+     * 1. 이벤트 저장과 동시에 집계 테이블 업데이트
+     * 2. 캐시 무효화로 최신 데이터 보장
+     * 3. 트랜잭션으로 데이터 일관성 보장
+     */
     private void saveEventLog(String eventId, String eventType, String aggregateId, String message, Long timestamp) {
         try {
             // 중복 체크
@@ -144,8 +157,39 @@ public class EventConsumerService {
             eventLogRepository.save(entity);
             log.debug("Saved event log: {}", eventId);
             
+            // 집계 테이블 업데이트
+            updateEventCountSummary(eventType);
+            
         } catch (Exception e) {
             log.error("Failed to save event log", e);
+        }
+    }
+
+    /**
+     * 이벤트 카운트 집계 테이블 업데이트 및 캐시 무효화
+     *
+     * @param eventType 이벤트 타입
+     */
+    @CacheEvict(value = "eventCount", allEntries = true)
+    private void updateEventCountSummary(String eventType) {
+        try {
+            EventCountSummaryEntity summary = eventCountSummaryRepository
+                .findByEventType(eventType)
+                .orElseGet(() -> EventCountSummaryEntity.builder()
+                    .eventType(eventType)
+                    .count(0L)
+                    .lastUpdated(LocalDateTime.now())
+                    .build());
+            
+            summary.incrementCount();
+            eventCountSummaryRepository.save(summary);
+            
+            log.debug("Updated event count summary for type: {}, new count: {}",
+                eventType, summary.getCount());
+            
+        } catch (Exception e) {
+            log.error("Failed to update event count summary for type: {}", eventType, e);
+            // 집계 테이블 업데이트 실패는 치명적이지 않으므로 예외를 던지지 않음
         }
     }
 }

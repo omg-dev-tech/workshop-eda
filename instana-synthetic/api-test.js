@@ -12,7 +12,7 @@
 const assert = require('assert');
 
 // API Gateway URL (하드코딩)
-const baseUrl = 'http://api-gateway-workshop-eda.apps.itz-12fl8d.infra01-lb.syd05.techzone.ibm.com';
+const baseUrl = 'http://api-gateway-workshop-eda.apps.itz-lfl3mc.hub01-lb.techzone.ibm.com';
 
 console.log('🔧 Configuration:');
 console.log(`  - Base URL: ${baseUrl}`);

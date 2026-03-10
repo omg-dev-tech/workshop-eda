@@ -1,0 +1,338 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-initdb
+  namespace: workshop-eda
+data:
+  # 01-init-databases.sql - 데이터베이스 및 사용자 생성
+  01-init-databases.sql: |
+    -- Create databases and users
+    CREATE DATABASE orderdb;
+    CREATE DATABASE inventorydb;
+    CREATE DATABASE fulfillmentdb;
+    CREATE DATABASE analyticsdb;
+
+  # 02-order-init.sql - Order Service 스키마
+  02-order-init.sql: |
+    \c orderdb;
+    
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    
+    -- 주문 테이블
+    CREATE TABLE IF NOT EXISTS orders (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        customer_id VARCHAR(255) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+        amount BIGINT NOT NULL,
+        currency VARCHAR(10) NOT NULL,
+        payment_id VARCHAR(255),
+        payment_method VARCHAR(50),
+        shipping_address TEXT,
+        estimated_delivery DATE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT orders_status_check CHECK (status IN ('PENDING', 'COMPLETED', 'CANCELED', 'INVENTORY_RESERVED', 'INVENTORY_REJECTED', 'PAYMENT_FAILED'))
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+    CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
+    
+    -- 주문 항목 테이블
+    CREATE TABLE IF NOT EXISTS order_items (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        product_id VARCHAR(255) NOT NULL,
+        product_name VARCHAR(255) NOT NULL,
+        quantity INTEGER NOT NULL,
+        unit_price DECIMAL(19,2) NOT NULL,
+        total_price DECIMAL(19,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+    CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);
+    
+    -- Outbox Events 테이블
+    CREATE TABLE IF NOT EXISTS outbox_events (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        aggregate_id VARCHAR(255) NOT NULL,
+        aggregate_type VARCHAR(100) NOT NULL,
+        event_type VARCHAR(100) NOT NULL,
+        event_data JSONB NOT NULL,
+        event_version INTEGER DEFAULT 1,
+        correlation_id VARCHAR(255),
+        status VARCHAR(20) DEFAULT 'PENDING',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed_at TIMESTAMP,
+        error_message TEXT
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_events(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON outbox_events(aggregate_type, aggregate_id);
+    CREATE INDEX IF NOT EXISTS idx_outbox_correlation ON outbox_events(correlation_id);
+
+  # 03-inventory-init.sql - Inventory Service 스키마
+  03-inventory-init.sql: |
+    \c inventorydb;
+    
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    
+    -- 재고 테이블
+    CREATE TABLE IF NOT EXISTS inventory (
+        sku VARCHAR(255) PRIMARY KEY,
+        product_name VARCHAR(255),
+        qty INTEGER NOT NULL DEFAULT 0,
+        reserved_stock INTEGER NOT NULL DEFAULT 0,
+        safety_stock INTEGER NOT NULL DEFAULT 0,
+        reorder_point INTEGER NOT NULL DEFAULT 10,
+        max_stock INTEGER NOT NULL DEFAULT 1000,
+        unit_cost DECIMAL(19,2),
+        last_restocked_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_inventory_stock_levels ON inventory(qty, reserved_stock);
+    
+    -- 재고 예약 테이블
+    CREATE TABLE IF NOT EXISTS reservations (
+        id VARCHAR(255) PRIMARY KEY,
+        order_id VARCHAR(255) NOT NULL,
+        sku VARCHAR(255) NOT NULL REFERENCES inventory(sku),
+        qty INTEGER NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        released_at TIMESTAMP WITH TIME ZONE
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_reservations_order_id ON reservations(order_id);
+    CREATE INDEX IF NOT EXISTS idx_reservations_sku ON reservations(sku);
+    CREATE INDEX IF NOT EXISTS idx_reservations_expires_at ON reservations(expires_at);
+    
+    -- 재고 이력 테이블
+    CREATE TABLE IF NOT EXISTS inventory_history (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        product_id VARCHAR(255) NOT NULL,
+        change_type VARCHAR(50) NOT NULL,
+        quantity_change INTEGER NOT NULL,
+        previous_stock INTEGER NOT NULL,
+        new_stock INTEGER NOT NULL,
+        reason VARCHAR(255),
+        reference_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_inventory_history_product_id ON inventory_history(product_id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_history_change_type ON inventory_history(change_type);
+    CREATE INDEX IF NOT EXISTS idx_inventory_history_created_at ON inventory_history(created_at);
+    
+    -- Outbox Events 테이블
+    CREATE TABLE IF NOT EXISTS outbox_events (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        aggregate_id VARCHAR(255) NOT NULL,
+        aggregate_type VARCHAR(100) NOT NULL,
+        event_type VARCHAR(100) NOT NULL,
+        event_data JSONB NOT NULL,
+        event_version INTEGER DEFAULT 1,
+        correlation_id VARCHAR(255),
+        status VARCHAR(20) DEFAULT 'PENDING',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed_at TIMESTAMP,
+        error_message TEXT
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_events(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON outbox_events(aggregate_type, aggregate_id);
+    
+    -- 기본 재고 데이터
+    INSERT INTO inventory (sku, product_name, qty, reserved_stock, safety_stock, reorder_point, unit_cost) VALUES
+    ('product-001', 'iPhone 15 Pro', 50, 0, 5, 10, 1200000),
+    ('product-002', 'Samsung Galaxy S24', 30, 0, 3, 8, 1100000),
+    ('product-003', 'MacBook Pro 14"', 20, 0, 2, 5, 2500000),
+    ('product-004', 'iPad Air', 40, 0, 4, 10, 800000),
+    ('product-005', 'AirPods Pro', 100, 0, 10, 20, 300000),
+    ('product-006', 'Apple Watch Series 9', 60, 0, 6, 15, 500000),
+    ('product-007', 'Sony WH-1000XM5', 25, 0, 3, 8, 400000),
+    ('product-008', 'Nintendo Switch OLED', 35, 0, 5, 12, 400000),
+    ('product-009', 'Dell XPS 13', 15, 0, 2, 5, 1800000),
+    ('product-010', 'LG OLED TV 55"', 10, 0, 1, 3, 2000000)
+    ON CONFLICT (sku) DO NOTHING;
+    
+    -- 재고 이력 초기 데이터
+    INSERT INTO inventory_history (product_id, change_type, quantity_change, previous_stock, new_stock, reason)
+    SELECT
+        sku as product_id,
+        'RESTOCK' as change_type,
+        qty as quantity_change,
+        0 as previous_stock,
+        qty as new_stock,
+        'Initial stock setup' as reason
+    FROM inventory
+    ON CONFLICT DO NOTHING;
+
+  # 04-fulfillment-init.sql - Fulfillment Service 스키마
+  04-fulfillment-init.sql: |
+    \c fulfillmentdb;
+    
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    
+    -- 배송 테이블
+    CREATE TABLE IF NOT EXISTS fulfillments (
+        id BIGSERIAL PRIMARY KEY,
+        order_id VARCHAR(64) NOT NULL UNIQUE,
+        status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+        event_time_ms BIGINT NOT NULL,
+        shipping_id VARCHAR(64),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_fulfillment_order ON fulfillments(order_id);
+    CREATE INDEX IF NOT EXISTS idx_fulfillment_status ON fulfillments(status);
+    
+    -- Outbox Events 테이블
+    CREATE TABLE IF NOT EXISTS outbox_events (
+        id BIGSERIAL PRIMARY KEY,
+        aggregate_id VARCHAR(255) NOT NULL,
+        aggregate_type VARCHAR(100) NOT NULL,
+        event_type VARCHAR(100) NOT NULL,
+        event_data JSONB NOT NULL,
+        event_version INTEGER DEFAULT 1,
+        correlation_id VARCHAR(255),
+        status VARCHAR(20) DEFAULT 'PENDING',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        processed_at TIMESTAMP WITH TIME ZONE,
+        error_message TEXT
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_events(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON outbox_events(aggregate_type, aggregate_id);
+
+  # 05-analytics-init.sql - Analytics Service 스키마
+  05-analytics-init.sql: |
+    \c analyticsdb;
+    
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    
+    -- Event Log Table
+    CREATE TABLE IF NOT EXISTS event_log (
+        id BIGSERIAL PRIMARY KEY,
+        event_id VARCHAR(255) UNIQUE NOT NULL,
+        event_type VARCHAR(100) NOT NULL,
+        aggregate_id VARCHAR(255) NOT NULL,
+        payload JSONB NOT NULL,
+        timestamp BIGINT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_event_type ON event_log(event_type);
+    CREATE INDEX IF NOT EXISTS idx_aggregate_id ON event_log(aggregate_id);
+    CREATE INDEX IF NOT EXISTS idx_timestamp ON event_log(timestamp);
+    
+    -- Event Count Summary Table
+    CREATE TABLE IF NOT EXISTS event_count_summary (
+        event_type VARCHAR(100) PRIMARY KEY,
+        count BIGINT NOT NULL DEFAULT 0,
+        last_updated TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_event_count_summary_last_updated ON event_count_summary(last_updated);
+    
+    -- Order Metrics Table
+    CREATE TABLE IF NOT EXISTS order_metrics (
+        id BIGSERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        hour INT NOT NULL,
+        total_orders INT DEFAULT 0,
+        completed_orders INT DEFAULT 0,
+        failed_orders INT DEFAULT 0,
+        cancelled_orders INT DEFAULT 0,
+        total_amount BIGINT DEFAULT 0,
+        avg_processing_time_ms BIGINT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(date, hour)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_order_metrics_date ON order_metrics(date);
+    
+    -- Product Metrics Table
+    CREATE TABLE IF NOT EXISTS product_metrics (
+        id BIGSERIAL PRIMARY KEY,
+        sku VARCHAR(100) NOT NULL,
+        date DATE NOT NULL,
+        total_sold INT DEFAULT 0,
+        total_revenue BIGINT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(sku, date)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_product_metrics_sku ON product_metrics(sku);
+    CREATE INDEX IF NOT EXISTS idx_product_metrics_date ON product_metrics(date);
+    
+    -- Customer Metrics Table
+    CREATE TABLE IF NOT EXISTS customer_metrics (
+        id BIGSERIAL PRIMARY KEY,
+        customer_id VARCHAR(255) NOT NULL,
+        date DATE NOT NULL,
+        total_orders INT DEFAULT 0,
+        total_amount BIGINT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(customer_id, date)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_customer_metrics_customer_id ON customer_metrics(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_customer_metrics_date ON customer_metrics(date);
+    
+    -- Payment Metrics Table
+    CREATE TABLE IF NOT EXISTS payment_metrics (
+        id BIGSERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        hour INT NOT NULL,
+        total_attempts INT DEFAULT 0,
+        successful_payments INT DEFAULT 0,
+        failed_payments INT DEFAULT 0,
+        total_amount BIGINT DEFAULT 0,
+        avg_processing_time_ms BIGINT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(date, hour)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_payment_metrics_date ON payment_metrics(date);
+    
+    -- Inventory Metrics Table
+    CREATE TABLE IF NOT EXISTS inventory_metrics (
+        id BIGSERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        hour INT NOT NULL,
+        total_checks INT DEFAULT 0,
+        successful_reservations INT DEFAULT 0,
+        rejected_reservations INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(date, hour)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_inventory_metrics_date ON inventory_metrics(date);
+    
+    -- Fulfillment Metrics Table
+    CREATE TABLE IF NOT EXISTS fulfillment_metrics (
+        id BIGSERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        hour INT NOT NULL,
+        total_scheduled INT DEFAULT 0,
+        total_shipped INT DEFAULT 0,
+        total_delivered INT DEFAULT 0,
+        avg_processing_time_ms BIGINT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(date, hour)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_fulfillment_metrics_date ON fulfillment_metrics(date);
+
+# Made with Bob

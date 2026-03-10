@@ -1,0 +1,196 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  namespace: workshop-eda
+  labels:
+    app: postgresql
+spec:
+  ports:
+    - port: 5432
+      name: postgres
+      targetPort: 5432
+  clusterIP: None
+  selector:
+    app: postgresql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-db
+  namespace: workshop-eda
+  labels:
+    app: postgresql
+    service: order-db
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: postgresql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-db
+  namespace: workshop-eda
+  labels:
+    app: postgresql
+    service: inventory-db
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: postgresql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fulfillment-db
+  namespace: workshop-eda
+  labels:
+    app: postgresql
+    service: fulfillment-db
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: postgresql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-db
+  namespace: workshop-eda
+  labels:
+    app: postgresql
+    service: analytics-db
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: postgresql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql
+  namespace: workshop-eda
+  labels:
+    app: postgresql
+spec:
+  serviceName: postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  template:
+    metadata:
+      labels:
+        app: postgresql
+    spec:
+      containers:
+      - name: postgresql
+        image: postgres:15
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: postgres-password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: postgresql-storage
+          mountPath: /var/lib/postgresql/data
+        - name: initdb-scripts
+          mountPath: /docker-entrypoint-initdb.d
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U postgres
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U postgres
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: initdb-scripts
+        configMap:
+          name: postgresql-initdb
+  volumeClaimTemplates:
+  - metadata:
+      name: postgresql-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+---
+# 데이터베이스 연결 정보 주석:
+# 
+# Order Service:
+#   Host: order-db.workshop-eda.svc.cluster.local
+#   Port: 5432
+#   Database: orderdb
+#   Username: postgres
+#   Password: postgres (from secret)
+#   JDBC URL: jdbc:postgresql://order-db:5432/orderdb
+#
+# Inventory Service:
+#   Host: inventory-db.workshop-eda.svc.cluster.local
+#   Port: 5432
+#   Database: inventorydb
+#   Username: postgres
+#   Password: postgres (from secret)
+#   JDBC URL: jdbc:postgresql://inventory-db:5432/inventorydb
+#
+# Fulfillment Service:
+#   Host: fulfillment-db.workshop-eda.svc.cluster.local
+#   Port: 5432
+#   Database: fulfillmentdb
+#   Username: postgres
+#   Password: postgres (from secret)
+#   JDBC URL: jdbc:postgresql://fulfillment-db:5432/fulfillmentdb
+#
+# Analytics Service:
+#   Host: analytics-db.workshop-eda.svc.cluster.local
+#   Port: 5432
+#   Database: analyticsdb
+#   Username: postgres
+#   Password: postgres (from secret)
+#   JDBC URL: jdbc:postgresql://analytics-db:5432/analyticsdb
+
+# Made with Bob

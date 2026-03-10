@@ -30,14 +30,13 @@ spec:
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.inventory-reserved
+  name: orders.v1.inventory_reserved
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: inventory-service
     event-type: inventory-reserved
 spec:
-  topicName: orders.v1.inventory_reserved
   partitions: 3
   replicas: 3
   config:
@@ -55,14 +54,13 @@ spec:
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.inventory-rejected
+  name: orders.v1.inventory_rejected
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: inventory-service
     event-type: inventory-rejected
 spec:
-  topicName: orders.v1.inventory_rejected
   partitions: 3
   replicas: 3
   config:
@@ -80,14 +78,13 @@ spec:
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.payment-authorized
+  name: orders.v1.payment_authorized
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: order-service
     event-type: payment-authorized
 spec:
-  topicName: orders.v1.payment_authorized
   partitions: 3
   replicas: 3
   config:
@@ -106,14 +103,13 @@ spec:
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.payment-failed
+  name: orders.v1.payment_failed
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: order-service
     event-type: payment-failed
 spec:
-  topicName: orders.v1.payment_failed
   partitions: 3
   replicas: 3
   config:
@@ -131,14 +127,13 @@ spec:
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.fulfillment-scheduled
+  name: orders.v1.fulfillment_scheduled
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: fulfillment-service
     event-type: fulfillment-scheduled
 spec:
-  topicName: orders.v1.fulfillment_scheduled
   partitions: 3
   replicas: 3
   config:

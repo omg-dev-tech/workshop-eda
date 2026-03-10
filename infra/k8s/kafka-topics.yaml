@@ -3,7 +3,7 @@
 # Producer: order-service (OrderService.publishOrderCreatedEvent)
 # Consumer: inventory-service (InventoryService.onOrderCreated)
 # Consumer: analytics-service (EventConsumerService.handleOrderCreated)
-apiVersion: kafka.strimzi.io/v1beta2
+apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
   name: orders.v1.created
@@ -16,83 +16,86 @@ spec:
   partitions: 3
   replicas: 3
   config:
-    retention.ms: 604800000  # 7 days
-    segment.ms: 86400000     # 1 day
+    retention.ms: "604800000"  # 7 days
+    segment.ms: "86400000"     # 1 day
     cleanup.policy: delete
     compression.type: producer
-    min.insync.replicas: 2
+    min.insync.replicas: "2"
 
 ---
 # Inventory Reserved Topic
 # Producer: inventory-service (InventoryService.onOrderCreated)
 # Consumer: order-service (OrderProcessService.onInventoryReserved)
 # Consumer: analytics-service (EventConsumerService.handleInventoryReserved)
-apiVersion: kafka.strimzi.io/v1beta2
+apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.inventory_reserved
+  name: orders.v1.inventory-reserved
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: inventory-service
     event-type: inventory-reserved
 spec:
+  topicName: orders.v1.inventory_reserved
   partitions: 3
   replicas: 3
   config:
-    retention.ms: 604800000
-    segment.ms: 86400000
+    retention.ms: "604800000"
+    segment.ms: "86400000"
     cleanup.policy: delete
     compression.type: producer
-    min.insync.replicas: 2
+    min.insync.replicas: "2"
 
 ---
 # Inventory Rejected Topic
 # Producer: inventory-service (InventoryService.onOrderCreated)
 # Consumer: order-service (OrderProcessService.onInventoryRejected)
 # Consumer: analytics-service (EventConsumerService.handleInventoryRejected)
-apiVersion: kafka.strimzi.io/v1beta2
+apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.inventory_rejected
+  name: orders.v1.inventory-rejected
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: inventory-service
     event-type: inventory-rejected
 spec:
+  topicName: orders.v1.inventory_rejected
   partitions: 3
   replicas: 3
   config:
-    retention.ms: 604800000
-    segment.ms: 86400000
+    retention.ms: "604800000"
+    segment.ms: "86400000"
     cleanup.policy: delete
     compression.type: producer
-    min.insync.replicas: 2
+    min.insync.replicas: "2"
 
 ---
 # Payment Authorized Topic
 # Producer: order-service (OrderProcessService.onInventoryReserved)
 # Consumer: fulfillment-service (FulfillmentService.onPaymentAuthorized)
 # Consumer: analytics-service (EventConsumerService.handlePaymentAuthorized)
-apiVersion: kafka.strimzi.io/v1beta2
+apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.payment_authorized
+  name: orders.v1.payment-authorized
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: order-service
     event-type: payment-authorized
 spec:
+  topicName: orders.v1.payment_authorized
   partitions: 3
   replicas: 3
   config:
-    retention.ms: 604800000
-    segment.ms: 86400000
+    retention.ms: "604800000"
+    segment.ms: "86400000"
     cleanup.policy: delete
     compression.type: producer
-    min.insync.replicas: 2
+    min.insync.replicas: "2"
 
 ---
 # Payment Failed Topic
@@ -100,47 +103,49 @@ spec:
 # Consumer: order-service (OrderProcessService.onPaymentFailed)
 # Consumer: inventory-service (InventoryService.onPaymentFailed)
 # Consumer: analytics-service (EventConsumerService.handlePaymentFailed)
-apiVersion: kafka.strimzi.io/v1beta2
+apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.payment_failed
+  name: orders.v1.payment-failed
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: order-service
     event-type: payment-failed
 spec:
+  topicName: orders.v1.payment_failed
   partitions: 3
   replicas: 3
   config:
-    retention.ms: 604800000
-    segment.ms: 86400000
+    retention.ms: "604800000"
+    segment.ms: "86400000"
     cleanup.policy: delete
     compression.type: producer
-    min.insync.replicas: 2
+    min.insync.replicas: "2"
 
 ---
 # Fulfillment Scheduled Topic
 # Producer: fulfillment-service (FulfillmentService.onPaymentAuthorized)
 # Consumer: order-service (OrderProcessService.onFulfillmentScheduled)
 # Consumer: analytics-service (EventConsumerService.handleFulfillmentScheduled)
-apiVersion: kafka.strimzi.io/v1beta2
+apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: orders.v1.fulfillment_scheduled
+  name: orders.v1.fulfillment-scheduled
   namespace: workshop-eda
   labels:
     strimzi.io/cluster: my-cluster
     service: fulfillment-service
     event-type: fulfillment-scheduled
 spec:
+  topicName: orders.v1.fulfillment_scheduled
   partitions: 3
   replicas: 3
   config:
-    retention.ms: 604800000
-    segment.ms: 86400000
+    retention.ms: "604800000"
+    segment.ms: "86400000"
     cleanup.policy: delete
     compression.type: producer
-    min.insync.replicas: 2
+    min.insync.replicas: "2"
 
 # Made with Bob

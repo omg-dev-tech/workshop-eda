@@ -1,5 +1,32 @@
 ---
 apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: kafka-pool
+  namespace: workshop-eda
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  replicas: 3
+  roles:
+    - controller
+    - broker
+  storage:
+    type: persistent-claim
+    size: 10Gi
+    deleteClaim: false
+  resources:
+    requests:
+      memory: 2Gi
+      cpu: 1000m
+    limits:
+      memory: 4Gi
+      cpu: 2000m
+  jvmOptions:
+    -Xms: 1024m
+    -Xmx: 2048m
+---
+apiVersion: kafka.strimzi.io/v1
 kind: Kafka
 metadata:
   name: my-cluster
@@ -7,10 +34,12 @@ metadata:
   labels:
     app: my-cluster
     component: kafka-cluster
+  annotations:
+    strimzi.io/kraft: enabled
+    strimzi.io/node-pools: enabled
 spec:
   kafka:
     version: 4.2.0
-    replicas: 3
     metadataVersion: 4.2-IV1
     listeners:
       - name: plain
@@ -27,8 +56,6 @@ spec:
       transaction.state.log.min.isr: 2
       default.replication.factor: 3
       min.insync.replicas: 2
-      inter.broker.protocol.version: "4.2"
-      log.message.format.version: "4.2"
       # 성능 최적화
       num.network.threads: 3
       num.io.threads: 8
@@ -41,48 +68,12 @@ spec:
       log.retention.check.interval.ms: 300000
       # 압축 설정
       compression.type: producer
-    storage:
-      type: persistent-claim
-      size: 10Gi
-      deleteClaim: false
-    resources:
-      requests:
-        memory: 2Gi
-        cpu: 1000m
-      limits:
-        memory: 4Gi
-        cpu: 2000m
-    jvmOptions:
-      -Xms: 1024m
-      -Xmx: 2048m
     metricsConfig:
       type: jmxPrometheusExporter
       valueFrom:
         configMapKeyRef:
           name: kafka-metrics
           key: kafka-metrics-config.yml
-  zookeeper:
-    replicas: 3
-    storage:
-      type: persistent-claim
-      size: 10Gi
-      deleteClaim: false
-    resources:
-      requests:
-        memory: 1Gi
-        cpu: 500m
-      limits:
-        memory: 2Gi
-        cpu: 1000m
-    jvmOptions:
-      -Xms: 512m
-      -Xmx: 1024m
-    metricsConfig:
-      type: jmxPrometheusExporter
-      valueFrom:
-        configMapKeyRef:
-          name: kafka-metrics
-          key: zookeeper-metrics-config.yml
   entityOperator:
     topicOperator:
       resources:
@@ -150,12 +141,5 @@ data:
       labels:
         topic: "$3"
         partition: "$4"
-  zookeeper-metrics-config.yml: |
-    lowercaseOutputName: true
-    rules:
-    # Zookeeper metrics
-    - pattern: "org.apache.ZooKeeperService<name0=(.+)><>(.+)"
-      name: zookeeper_$2
-      type: GAUGE
 
 # Made with Bob
